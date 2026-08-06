@@ -1,0 +1,11 @@
+{
+  "site": {
+    "repo_name": "production-ai-patterns",
+    "title": "Production AI Patterns",
+    "tagline": "A pattern language for AI that has to survive contact with production.",
+    "base_url": "https://iggym.github.io/production-ai-patterns/",
+    "audience": "Mid-to-senior ML/platform engineers",
+    "description": "Named, reusable patterns for the architectural decisions that actually determine whether an AI system survives production traffic — context, cost, reliability, observability, and security."
+  },
+  "articles": []
+}
