@@ -9,6 +9,20 @@
   },
   "articles": [
     {
+  "title": "The Unbounded Memory Trap",
+  "hook": "Accumulated context isn't a superpower; it is an unpatched attack surface.",
+  "date": "2024-06-14",
+  "status": "published",
+  "pinned": false,
+  "reading_time_minutes": 5,
+  "tags": ["context-management", "security", "multi-agent", "pattern"],
+  "path": "articles/unbounded-memory-trap.html",
+  "id": "ctx-firewall-001",
+  "slug": "unbounded-memory-trap",
+  "type": "pattern",
+  "research_window": ["2024-05-17", "2024-06-14"]
+},
+    {
       "title": "Reading the Pattern Language",
       "hook": "How this catalog is organized, what a 'pattern' means here, and how to navigate from symptom to solution when your system is breaking in production.",
       "date": "2025-01-15",
