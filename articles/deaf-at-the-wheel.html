@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deaf at the Wheel — Production AI Patterns</title>
+<style>
+:root {
+  --bg: #0c0e14;
+  --surface: #151822;
+  --card: #1c2030;
+  --card-alt: #222738;
+  --border: #2a3048;
+  --text: #e4e8f0;
+  --muted: #8892a6;
+  --accent: #5b8cff;
+  --accent-dim: #3a5fcc;
+  --accent-bg: rgba(91,140,255,0.08);
+  --green: #34d399;
+  --green-bg: rgba(52,211,153,0.1);
+  --red: #f87171;
+  --red-bg: rgba(248,113,113,0.1);
+  --yellow: #fbbf24;
+  --yellow-bg: rgba(251,191,36,0.1);
+  --orange: #fb923c;
+  --rail-w: 220px;
+  --topbar-h: 52px;
+  --radius: 8px;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:calc(var(--topbar-h) + 24px)}
+body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.65;font-size:16px;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code{font-family:var(--mono);font-size:.88em;background:var(--card);padding:2px 6px;border-radius:4px;color:var(--accent)}
+strong{color:#fff;font-weight:600}
+
+/* Progress */
+#progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);z-index:9999;width:0;transition:width .15s linear}
+
+/* Topbar */
+#topbar{position:sticky;top:0;z-index:100;height:var(--topbar-h);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:rgba(12,14,20,0.82);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px}
+#topbar .home{font-weight:700;font-size:.85rem;letter-spacing:.02em;color:var(--text);white-space:nowrap}
+#topbar .home:hover{color:var(--accent);text-decoration:none}
+#topbar .crumb{font-size:.78rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#topbar .crumb span{color:var(--text)}
+#topbar .rt{margin-left:auto;font-size:.75rem;color:var(--muted);white-space:nowrap}
+#hamburger{display:none;background:none;border:none;color:var(--text);font-size:1.4rem;cursor:pointer;padding:4px}
+
+/* Layout */
+.wrap{display:grid;grid-template-columns:var(--rail-w) 1fr;max-width:1120px;margin:0 auto;min-height:calc(100vh - var(--topbar-h))}
+#rail{position:sticky;top:var(--topbar-h);height:calc(100vh - var(--topbar-h));overflow-y:auto;padding:28px 16px;border-right:1px solid var(--border);scrollbar-width:thin}
+#rail nav{display:flex;flex-direction:column;gap:4px}
+#rail nav a{font-size:.78rem;color:var(--muted);padding:6px 10px;border-radius:6px;transition:all .15s;line-height:1.4}
+#rail nav a:hover{color:var(--text);background:var(--accent-bg);text-decoration:none}
+#rail nav a.active{color:var(--accent);background:var(--accent-bg);font-weight:600}
+#rail .rail-label{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:16px 0 6px;font-weight:600}
+main{padding:32px 40px 80px;max-width:760px;min-width:0}
+
+/* Hero */
+.hero{margin-bottom:36px}
+.hero h1{font-size:clamp(2.1rem,5vw,3.1rem);font-weight:800;line-height:1.15;letter-spacing:-.02em;color:#fff;margin-bottom:10px}
+.hero .sub{font-size:1.05rem;color:var(--accent);font-weight:600;margin-bottom:8px}
+.hero .meta{font-size:.8rem;color:var(--muted)}
+
+/* Spectrum */
+.spectrum-wrap{margin:32px 0;padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.spectrum-wrap .spec-label{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px;font-weight:600}
+.spectrum-slider{width:100%;margin-bottom:16px;accent-color:var(--accent)}
+.spec-panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.spec-panel{padding:16px;border-radius:6px;font-size:.82rem}
+.spec-panel.call{background:var(--green-bg);border:1px solid rgba(52,211,153,.2)}
+.spec-panel.decision{background:var(--red-bg);border:1px solid rgba(248,113,113,.2)}
+.spec-panel h4{font-size:.78rem;margin-bottom:8px;font-weight:700}
+.spec-panel.call h4{color:var(--green)}
+.spec-panel.decision h4{color:var(--red)}
+.spec-panel .metric{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.spec-panel .metric .val{font-family:var(--mono);font-weight:600}
+.spec-panel .val.ok{color:var(--green)}
+.spec-panel .val.bad{color:var(--red)}
+.spec-panel .val.warn{color:var(--yellow)}
+.spec-highlight{margin-top:12px;font-size:.82rem;color:var(--muted);line-height:1.5;min-height:40px}
+
+/* Pattern Card */
+.pattern-card{margin:32px 0;padding:0;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:var(--radius);overflow:hidden}
+.pattern-card .pc-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;cursor:pointer;user-select:none}
+.pattern-card .pc-header h3{font-size:.95rem;font-weight:700;color:#fff}
+.pattern-card .pc-toggle{font-size:.75rem;color:var(--accent);font-weight:600}
+.pattern-card .pc-body{padding:0 20px 20px;display:none}
+.pattern-card.open .pc-body{display:block}
+.pattern-card.open .pc-toggle::after{content:'−';margin-left:4px}
+.pattern-card:not(.open) .pc-toggle::after{content:'+';margin-left:4px}
+.pc-section{margin-bottom:14px}
+.pc-section:last-child{margin-bottom:0}
+.pc-section .pc-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:4px}
+.pc-section .pc-label.prob{color:var(--red)}
+.pc-section .pc-label.force{color:var(--yellow)}
+.pc-section .pc-label.sol{color:var(--green)}
+.pc-section .pc-label.cons{color:var(--orange)}
+.pc-section p,.pc-section ul{font-size:.84rem;color:var(--muted);line-height:1.55}
+.pc-section ul{padding-left:16px;margin-top:4px}
+.pc-section li{margin-bottom:3px}
+
+/* Article sections */
+article h2{font-size:1.35rem;font-weight:700;color:#fff;margin:36px 0 12px;letter-spacing:-.01em}
+article h3{font-size:1.08rem;font-weight:600;color:var(--text);margin:20px 0 8px}
+article p{margin-bottom:16px}
+article ul,article ol{margin:0 0 16px 20px}
+article li{margin-bottom:6px}
+article .italics{font-style:italic;color:var(--muted)}
+
+/* Pull quote */
+.pull-quote{margin:36px -20px;padding:24px 28px;background:var(--accent-bg);border-left:4px solid var(--accent);border-radius:0 var(--radius) var(--radius) 0;font-size:1.08rem;font-weight:600;color:#fff;line-height:1.5;font-style:italic}
+
+/* Architecture diagram */
+.arch-section{margin:32px 0}
+.arch-section h3{font-size:.9rem;color:var(--muted);margin-bottom:12px;font-weight:600}
+.arch-svg-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;overflow-x:auto}
+.arch-svg-wrap svg{width:100%;height:auto;display:block}
+.arch-tooltip{position:absolute;background:#1a1e2e;border:1px solid var(--accent);color:var(--text);font-size:.76rem;padding:8px 12px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:50;max-width:240px;line-height:1.4}
+
+/* Recall cards */
+.recall-section{margin:32px 0}
+.recall-section>h3{font-size:.9rem;color:var(--muted);margin-bottom:12px;font-weight:600}
+.recall-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.recall-card{perspective:600px;cursor:pointer;min-height:140px}
+.recall-inner{position:relative;width:100%;min-height:140px;transition:transform .4s ease;transform-style:preserve-3d}
+.recall-card.flipped .recall-inner{transform:rotateY(180deg)}
+.recall-front,.recall-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;justify-content:center}
+.recall-front{background:var(--card);border:1px solid var(--border)}
+.recall-front .rq{font-size:.88rem;font-weight:600;color:var(--text);line-height:1.4}
+.recall-front .hint{font-size:.7rem;color:var(--muted);margin-top:8px}
+.recall-back{background:var(--accent-bg);border:1px solid var(--accent-dim);transform:rotateY(180deg)}
+.recall-back .ra{font-size:.84rem;color:var(--text);line-height:1.5}
+
+/* Concept map */
+.concept-section{margin:32px 0}
+.concept-section>h3{font-size:.9rem;color:var(--muted);margin-bottom:12px;font-weight:600}
+.concept-svg-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;overflow-x:auto}
+.concept-svg-wrap svg{width:100%;height:auto;display:block}
+
+/* Share */
+.share-block{margin:36px 0;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.share-block .share-label{font-size:.82rem;color:var(--muted);font-weight:600}
+.share-block a{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;font-size:.8rem;font-weight:600;transition:background .15s}
+.share-block .share-x{background:rgba(255,255,255,.06);color:var(--text)}
+.share-block .share-x:hover{background:rgba(255,255,255,.12);text-decoration:none}
+.share-block .share-li{background:rgba(0,119,181,.15);color:#54c4ff}
+.share-block .share-li:hover{background:rgba(0,119,181,.25);text-decoration:none}
+
+/* CTA */
+.cta-box{margin:32px 0;padding:20px 24px;background:var(--accent-bg);border:1px solid var(--accent-dim);border-radius:var(--radius);font-size:.95rem;font-weight:600;color:#fff;line-height:1.5}
+
+/* Footer */
+footer{border-top:1px solid var(--border);padding:32px 40px;max-width:1120px;margin:0 auto}
+footer .cite-list{font-size:.78rem;color:var(--muted);line-height:1.6}
+footer .cite-list strong{color:var(--text)}
+footer .foot-links{margin-top:16px;font-size:.78rem;display:flex;gap:16px}
+
+/* Scroll top */
+#scroll-top{position:fixed;bottom:24px;right:24px;width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:1.1rem;display:none;align-items:center;justify-content:center;z-index:90;box-shadow:0 2px 12px rgba(91,140,255,.3);transition:opacity .2s}
+#scroll-top.show{display:flex}
+
+/* Mobile drawer */
+#drawer-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:80}
+#drawer-overlay.open{display:block}
+#drawer{position:fixed;top:0;left:-280px;width:280px;height:100vh;background:var(--surface);z-index:90;padding:24px 16px;overflow-y:auto;transition:left .25s ease;border-right:1px solid var(--border)}
+#drawer.open{left:0}
+#drawer nav a{display:block;font-size:.85rem;color:var(--muted);padding:8px 12px;border-radius:6px;margin-bottom:2px}
+#drawer nav a:hover{color:var(--text);background:var(--accent-bg);text-decoration:none}
+#drawer .drawer-title{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px;font-weight:700}
+
+/* Responsive */
+@media(max-width:880px){
+  .wrap{grid-template-columns:1fr}
+  #rail{display:none}
+  main{padding:24px 20px 60px}
+  #hamburger{display:block}
+  .spec-panels{grid-template-columns:1fr}
+  footer{padding:24px 20px}
+}
+
+/* Reduced motion */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  html{scroll-behavior:auto}
+  .recall-inner{transition:none}
+  #drawer{transition:none}
+}
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<header id="topbar">
+  <button id="hamburger" aria-label="Menu">☰</button>
+  <a href="https://iggym.github.io/production-ai-patterns/" class="home">← Production AI Patterns</a>
+  <div class="crumb">/<span>deaf-at-the-wheel</span></div>
+  <span class="rt">6 min read</span>
+</header>
+
+<div id="drawer-overlay"></div>
+<div id="drawer">
+  <div class="drawer-title">On this page</div>
+  <nav>
+    <a href="#opening">Opening Scene</a>
+    <a href="#reframe">The Wrong Depth</a>
+    <a href="#pattern">The Pattern</a>
+    <a href="#seams">Where the Seams Split</a>
+    <a href="#hidden">Hidden Connection</a>
+    <a href="#cred">Credibility & Nuance</a>
+    <a href="#moves">This Week's Moves</a>
+  </nav>
+</div>
+
+<div class="wrap">
+  <aside id="rail">
+    <div class="rail-label">On this page</div>
+    <nav>
+      <a href="#opening">Opening Scene</a>
+      <a href="#reframe">The Wrong Depth</a>
+      <a href="#pattern">The Pattern</a>
+      <a href="#seams">Where the Seams Split</a>
+      <a href="#hidden">Hidden Connection</a>
+      <a href="#cred">Credibility & Nuance</a>
+      <a href="#moves">This Week's Moves</a>
+    </nav>
+    <div class="rail-label">Pattern</div>
+    <nav>
+      <a href="#pattern-card">Decision-Layer Observability</a>
+    </nav>
+  </aside>
+
+  <main id="content">
+    <section class="hero">
+      <h1>Deaf at the Wheel</h1>
+      <p class="sub">Decision-Layer Observability</p>
+      <p class="meta">April 14, 2025 &nbsp;·&nbsp; Observability Patterns</p>
+    </section>
+
+    <!-- Spectrum widget -->
+    <div class="spectrum-wrap">
+      <div class="spec-label">Shift the instrumentation depth</div>
+      <input type="range" min="0" max="100" value="0" class="spectrum-slider" id="specSlider" aria-label="Instrumentation depth slider">
+      <div class="spec-panels">
+        <div class="spec-panel call" id="specCall">
+          <h4>📡 Call-Layer Metrics</h4>
+          <div class="metric"><span>p99 latency</span><span class="val ok">180ms ✓</span></div>
+          <div class="metric"><span>error rate</span><span class="val ok">0.3% ✓</span></div>
+          <div class="metric"><span>token throughput</span><span class="val ok">42k/min ✓</span></div>
+          <div class="metric"><span>relevance score</span><span class="val" style="color:var(--muted)">—</span></div>
+          <div class="metric"><span>faithfulness</span><span class="val" style="color:var(--muted)">—</span></div>
+          <div class="metric"><span>outcome quality</span><span class="val" style="color:var(--muted)">—</span></div>
+        </div>
+        <div class="spec-panel decision" id="specDecision">
+          <h4>🎯 Decision-Layer Metrics</h4>
+          <div class="metric"><span>p99 latency</span><span class="val ok">180ms ✓</span></div>
+          <div class="metric"><span>error rate</span><span class="val ok">0.3% ✓</span></div>
+          <div class="metric"><span>token throughput</span><span class="val ok">42k/min ✓</span></div>
+          <div class="metric"><span>relevance score</span><span class="val bad">0.41 ✗</span></div>
+          <div class="metric"><span>faithfulness</span><span class="val bad">0.38 ✗</span></div>
+          <div class="metric"><span>outcome quality</span><span class="val bad">degrading ↓</span></div>
+        </div>
+      </div>
+      <div class="spec-highlight" id="specText">← Drag to see what each layer reveals. Same system. Same moment. Different truth.</div>
+    </div>
+
+    <article id="article">
+
+      <section id="opening">
+        <p>Your RAG system serves 50,000 queries a day. Dashboards glow green — p99 retrieval latency 180ms, LLM call latency 1.2s, error rate 0.3%. Everything within SLA. Then customer complaints spike 40x in a single week. The vector database had silently fragmented its HNSW index after a bulk document update. Retrieval still returned five results in 180ms — but they were the <strong>wrong five</strong>. Every standard metric said healthy. Every outcome was broken <sup>[3]</sup>.</p>
+        <p>This isn't a rare edge case. It's the default failure mode of AI in production.</p>
+      </section>
+
+      <h2 id="reframe">The Wrong Depth</h2>
+      <p>Here's the correction: <strong>model health ≠ outcome health.</strong> You built your dashboards at the call layer. AI systems fail at the decision layer.</p>
+      <p>Datadog saw this gap clearly enough to build an entirely separate product. Their existing APM traced HTTP calls to model APIs with sub-millisecond precision — request duration, status code, payload size. But when GPT-4 returned a confidently hallucinated function call, or a RAG pipeline served irrelevant context that the model faithfully summarized into a plausible wrong answer, APM saw <code>200 OK</code>. Datadog LLM Observability, launched to address precisely this, traces the full semantic chain — prompt construction → model call → output parsing → downstream consumption — annotating each span with quality signals that traditional APM <em>cannot compute</em> <sup>[1]</sup>.</p>
+      <p>The insight isn't that APM is broken. It's that APM instruments the <em>transport</em>, and AI's critical failures are <em>semantic</em>.</p>
+
+      <h2 id="pattern">Decision-Layer Observability</h2>
+
+      <p><span class="italics">Problem.</span> Standard observability instruments the transport — HTTP status, latency, token throughput. AI systems produce failures invisible to these instruments: semantic degradation, retrieval drift, hallucination, format violation. These failures return <code>200 OK</code>.</p>
+
+      <p><span class="italics">Forces.</span> Four forces make naïve solutions fail:</p>
+      <ul>
+        <li><strong>Probabilistic outputs.</strong> No compiler catches a wrong answer. Every response is potentially valid syntax and catastrophically wrong semantics.</li>
+        <li><strong>Continuous drift.</strong> Quality degrades between deployments — embedding models go stale, knowledge bases diverge, user intent shifts. Batch evaluation at deploy time misses everything after.</li>
+        <li><strong>Evaluation cost.</strong> Running a judge LLM on every output can double your inference bill. The naïve fix is economically infeasible at scale.</li>
+        <li><strong>Tooling mismatch.</strong> APM and metric systems assume deterministic software. They have primitives for counts and durations, not for "relevance" or "faithfulness."</li>
+      </ul>
+
+      <p><span class="italics">Solution.</span> Three moves, in order:</p>
+      <ol>
+        <li><strong>Pipe evaluation scores into observability as first-class metrics.</strong> Relevance, faithfulness, correctness — these are your p99 equivalents. Arize Phoenix was built for exactly this: it runs evaluation on production traces and writes scores back as span attributes, not as a separate batch report. Evaluation becomes a runtime signal, not a CI artifact <sup>[2]</sup>.</li>
+        <li><strong>Sample, don't scan.</strong> Stratified sampling of 5–10% of production traffic gives you 95% confidence intervals on quality metrics at a fraction of the cost. You need a representative slice continuously — not every request.</li>
+        <li><strong>Alert on decision-quality distributions, not call-level thresholds.</strong> A drop in mean relevance score from 0.87 to 0.72 over four hours is your production incident — not a latency spike.</li>
+      </ol>
+
+      <p><span class="italics">Consequences.</span> You gain detection of semantic drift within minutes instead of days. You pay 10–30% additional compute for evaluation inference. You must operate evaluation infrastructure (judge models, scoring pipelines, eval datasets) as a production system, not a notebook. And you may discover your quality was worse than you thought — the green dashboards were masking real problems all along.</p>
+
+      <h2 id="seams">Where the Seams Split</h2>
+
+      <p>Consider a production RAG stack: documents enter through LlamaIndex's <code>SentenceSplitter</code>, get embedded with OpenAI's <code>text-embedding-3-small</code>, and land in Pinecone Serverless on a p2 index. At query time, the same embedding model vectorizes the question, Pinecone returns five nearest neighbors, Cohere's <code>rerank-english-v3.0</code> re-scores them, GPT-4o synthesizes an answer, and LangSmith logs the trace — latency, token count, tool calls. All green <sup>[3]</sup>.</p>
+
+      <p>The observable seam sits between retrieval and generation. Pinecone reports search latency and result count. It does <em>not</em> report whether those five results are relevant to the query. As the index fragments or the embedding model drifts from the corpus, retrieval degrades semantically while remaining healthy operationally. The LLM faithfully summarizes irrelevant context into a confident wrong answer. LangSmith records a successful trace. The user gets garbage.</p>
+
+      <p>Decision-Layer Observability inserts instrumentation at the seam: a relevance evaluator scores the retrieved context against the query before generation proceeds. That score — not retrieval latency — is the metric that catches the failure.</p>
+
+      <blockquote class="pull-quote" id="hidden">
+        The observability gap in AI systems is isomorphic to the test gap: if you can't evaluate it continuously, you can't observe it continuously.
+      </blockquote>
+
+      <h2 id="cred">Credibility and Nuance</h2>
+
+      <p>Datadog built a separate LLM Observability product because APM couldn't detect semantic failure <sup>[1]</sup>. Arize Phoenix pipes evaluation into traces because batch evaluation detects drift days late <sup>[2]</sup>. The RAG retrieval-relevance gap is documented across vector database operator postmortems in Q1 2025 <sup>[3]</sup>.</p>
+
+      <p>Counterargument: <em>evaluation is too expensive to run on production traffic.</em> You don't need every request. Stratified sampling at 5–10% gives you 95% confidence intervals at ~10% of the evaluation cost — and you already pay far more for the undetected failures your green dashboards are hiding.</p>
+
+      <h2 id="moves">This Week's Moves</h2>
+      <ol>
+        <li><strong>List decisions, not calls.</strong> Enumerate every AI-powered decision your system makes — every point where model output drives a user-visible action or downstream behavior.</li>
+        <li><strong>Identify the outcome signal.</strong> For each decision, name the observable signal that tells you the outcome was good. If none exists, you need a judge or a feedback loop.</li>
+        <li><strong>Instrument at the seam.</strong> Add evaluation-score metrics at the boundary between retrieval and generation, and between generation and consumption.</li>
+        <li><strong>Alert on distributions.</strong> Set alerts on quality-score means and percentiles, not on latency or error rate alone. A slow drift from 0.9 to 0.7 over a day is an incident.</li>
+        <li><strong>Chaos-test your dashboards.</strong> Deliberately degrade retrieval quality and verify your instrumentation detects it within 10 minutes.</li>
+      </ol>
+    </article>
+
+    <!-- Pattern Card -->
+    <div class="pattern-card open" id="pattern-card">
+      <div class="pc-header" onclick="this.parentElement.classList.toggle('open')">
+        <h3>▦ Decision-Layer Observability</h3>
+        <span class="pc-toggle">Expand</span>
+      </div>
+      <div class="pc-body">
+        <div class="pc-section">
+          <div class="pc-label prob">Problem</div>
+          <p>Standard observability instruments the transport (HTTP, latency, tokens). AI's critical failures are semantic and return 200 OK.</p>
+        </div>
+        <div class="pc-section">
+          <div class="pc-label force">Forces</div>
+          <ul>
+            <li>Probabilistic outputs — no compiler catches wrong semantics</li>
+            <li>Continuous drift — quality degrades between deploys</li>
+            <li>Evaluation cost — judging every output doubles inference</li>
+            <li>Tooling mismatch — APM has no "relevance" primitive</li>
+          </ul>
+        </div>
+        <div class="pc-section">
+          <div class="pc-label sol">Solution</div>
+          <ul>
+            <li>Pipe eval scores (relevance, faithfulness) into traces as first-class metrics</li>
+            <li>Sample 5–10% of traffic for continuous evaluation</li>
+            <li>Alert on quality-score distributions, not call-level thresholds</li>
+          </ul>
+        </div>
+        <div class="pc-section">
+          <div class="pc-label cons">Consequences</div>
+          <ul>
+            <li>Drift detection in minutes, not days</li>
+            <li>10–30% additional eval compute cost</li>
+            <li>Eval infra becomes a production system</li>
+            <li>May reveal quality was always worse than green dashboards claimed</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architecture SVG -->
+    <section class="arch-section" id="arch-diagram">
+      <h3>Production RAG — layered architecture with observability gap</h3>
+      <div class="arch-svg-wrap" style="position:relative">
+        <svg viewBox="0 0 640 420" xmlns="http://www.w3.org/2000/svg" font-family="var(--font)" id="archSvg">
+          <!-- Background -->
+          <rect x="0" y="0" width="640" height="420" fill="transparent"/>
+          
+          <!-- Layer 1: Ingestion -->
+          <g class="arch-layer" data-tip="Documents → LlamaIndex SentenceSplitter → OpenAI text-embedding-3-small → Pinecone Serverless (p2 index)">
+            <rect x="40" y="20" width="560" height="60" rx="8" fill="#1c2030" stroke="#2a3048" stroke-width="1.5"/>
+            <text x="60" y="44" fill="#5b8cff" font-size="11" font-weight="700">INGESTION</text>
+            <text x="60" y="62" fill="#8892a6" font-size="10">SentenceSplitter → text-embedding-3-small → Pinecone p2</text>
+          </g>
+          
+          <!-- Arrow 1→2 -->
+          <line x1="320" y1="80" x2="320" y2="100" stroke="#2a3048" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          
+          <!-- Layer 2: Retrieval -->
+          <g class="arch-layer" data-tip="Query → OpenAI text-embedding-3-small → Pinecone query (top-k=5, cosine) → Cohere rerank-english-v3.0">
+            <rect x="40" y="100" width="560" height="60" rx="8" fill="#1c2030" stroke="#2a3048" stroke-width="1.5"/>
+            <text x="60" y="124" fill="#34d399" font-size="11" font-weight="700">RETRIEVAL</text>
+            <text x="60" y="142" fill="#8892a6" font-size="10">Embed query → Pinecone top-5 → Cohere rerank-v3</text>
+          </g>
+          
+          <!-- GAP indicator -->
+          <g id="gapIndicator">
+            <line x1="320" y1="160" x2="320" y2="180" stroke="#f87171" stroke-width="2" stroke-dasharray="4,3"/>
+            <rect x="180" y="162" width="280" height="18" rx="4" fill="rgba(248,113,113,0.1)" stroke="#f87171" stroke-width="1" stroke-dasharray="4,2"/>
+            <text x="320" y="175" fill="#f87171" font-size="9" font-weight="700" text-anchor="middle">⚠ OBSERVABILITY GAP — relevance not measured</text>
+          </g>
+          
+          <!-- Layer 3: Generation -->
+          <g class="arch-layer" data-tip="LlamaIndex prompt template → OpenAI GPT-4o → response parsing. Model faithfully summarizes whatever context it receives — relevant or not.">
+            <rect x="40" y="180" width="560" height="60" rx="8" fill="#1c2030" stroke="#2a3048" stroke-width="1.5"/>
+            <text x="60" y="204" fill="#fbbf24" font-size="11" font-weight="700">GENERATION</text>
+            <text x="60" y="222" fill="#8892a6" font-size="10">LlamaIndex prompt → GPT-4o → parse response</text>
+          </g>
+          
+          <!-- Arrow 3→4 -->
+          <line x1="320" y1="240" x2="320" y2="260" stroke="#2a3048" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          
+          <!-- Layer 4: Application -->
+          <g class="arch-layer" data-tip="Response → UI render → user action/feedback. This is where the consequence of a bad retrieval becomes visible — but standard metrics don't reach here.">
+            <rect x="40" y="260" width="560" height="60" rx="8" fill="#1c2030" stroke="#2a3048" stroke-width="1.5"/>
+            <text x="60" y="284" fill="#fb923c" font-size="11" font-weight="700">APPLICATION</text>
+            <text x="60" y="302" fill="#8892a6" font-size="10">Response → UI render → user action</text>
+          </g>
+          
+          <!-- Arrow 4→5 -->
+          <line x1="320" y1="320" x2="320" y2="340" stroke="#2a3048" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          
+          <!-- Layer 5: Observability (broken) -->
+          <g class="arch-layer" data-tip="LangSmith traces: latency ✓, token count ✓, error rate ✓ — all green. Datadog APM: HTTP 200 ✓, sub-2s ✓ — all green. Neither can see semantic quality.">
+            <rect x="40" y="340" width="560" height="60" rx="8" fill="#1c2030" stroke="#34d399" stroke-width="1.5" stroke-dasharray="6,3"/>
+            <text x="60" y="364" fill="#34d399" font-size="11" font-weight="700">OBSERVABILITY (call-layer only)</text>
+            <text x="60" y="382" fill="#8892a6" font-size="10">LangSmith: latency ✓ tokens ✓ errors ✓ — all green · decision quality: ???</text>
+          </g>
+          
+          <!-- Arrow marker def -->
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#2a3048"/>
+            </marker>
+          </defs>
+        </svg>
+        <div class="arch-tooltip" id="archTip"></div>
+      </div>
+    </section>
+
+    <!-- Recall Cards -->
+    <section class="recall-section">
+      <h3>Recall practice — key decision points</h3>
+      <div class="recall-grid">
+        <div class="recall-card" onclick="this.classList.toggle('flipped')">
+          <div class="recall-inner">
+            <div class="recall-front">
+              <div class="rq">What layer should you instrument for AI observability?</div>
+              <div class="hint">Tap to reveal</div>
+            </div>
+            <div class="recall-back">
+              <div class="ra">The <strong>decision layer</strong> — where AI output becomes a business action. Not the call layer where the model returns tokens.</div>
+            </div>
+          </div>
+        </div>
+        <div class="recall-card" onclick="this.classList.toggle('flipped')">
+          <div class="recall-inner">
+            <div class="recall-front">
+              <div class="rq">Why does sampling work instead of evaluating every request?</div>
+              <div class="hint">Tap to reveal</div>
+            </div>
+            <div class="recall-back">
+              <div class="ra">Stratified sampling at <strong>5–10%</strong> gives <strong>95% confidence intervals</strong> on quality distributions at ~10% of the evaluation cost.</div>
+            </div>
+          </div>
+        </div>
+        <div class="recall-card" onclick="this.classList.toggle('flipped')">
+          <div class="recall-inner">
+            <div class="recall-front">
+              <div class="rq">Where does the observability gap typically appear in RAG?</div>
+              <div class="hint">Tap to reveal</div>
+            </div>
+            <div class="recall-back">
+              <div class="ra">Between <strong>retrieval and generation</strong> — retrieval can return fast, irrelevant results that standard metrics can't distinguish from fast, relevant ones.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Concept Map -->
+    <section class="concept-section">
+      <h3>How this pattern connects</h3>
+      <div class="concept-svg-wrap">
+        <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg" font-family="var(--font)">
+          <!-- Center node -->
+          <rect x="190" y="110" width="220" height="50" rx="8" fill="rgba(91,140,255,0.12)" stroke="#5b8cff" stroke-width="2"/>
+          <text x="300" y="140" fill="#5b8cff" font-size="12" font-weight="700" text-anchor="middle">Decision-Layer Observability</text>
+          
+          <!-- Top: Context Management -->
+          <line x1="300" y1="110" x2="300" y2="60" stroke="#2a3048" stroke-width="1.5"/>
+          <rect x="210" y="20" width="180" height="40" rx="6" fill="#1c2030" stroke="#2a3048" stroke-width="1.5"/>
+          <text x="300" y="45" fill="#8892a6" font-size="10" font-weight="600" text-anchor="middle">Context Management</text>
+          <text x="300" y="75" fill="#5b8cff" font-size="8" text-anchor="middle">prompt quality signals</text>
+          
+          <!-- Right: Cost Governance -->
+          <line x1="410" y1="135" x2="480" y2="135" stroke="#2a3048" stroke-width="1.5"/>
+          <rect x="480" y="110" width="110" height="50" rx="6" fill="#1c2030" stroke="#2a3048" stroke-width="1.5"/>
+          <text x="535" y="133" fill="#8892a6" font-size="10" font-weight="600" text-anchor="middle">Cost</text>
+          <text x="535" y="148" fill="#8892a6" font-size="10" font-weight="600" text-anchor="middle">Governance</text>
+          <text x="445" y="125" fill="#fbbf24" font-size="8" text-anchor="middle">eval compute cost</text>
+          
+          <!-- Bottom: Reliability -->
+          <line x1="300" y1="160" x2="300" y2="210" stroke="#2a3048" stroke-width="1.5"/>
+          <rect x="230" y="210" width="140" height="40" rx="6" fill="#1c2030" stroke="#2a3048" stroke-width="1.5"/>
+          <text x="300" y="235" fill="#8892a6" font-size="10" font-weight="600" text-anchor="middle">Reliability</text>
+          <text x="300" y="205" fill="#34d399" font-size="8" text-anchor="middle">semantic retry triggers</text>
+          
+          <!-- Left: Architecture -->
+          <line x1="190" y1="135" x2="120" y2="135" stroke="#2a3048" stroke-width="1.5"/>
+          <rect x="10" y="110" width="110" height="50" rx="6" fill="#1c2030" stroke="#2a3048" stroke-width="1.5"/>
+          <text x="65" y="133" fill="#8892a6" font-size="10" font-weight="600" text-anchor="middle">Architecture</text>
+          <text x="65" y="148" fill="#8892a6" font-size="10" font-weight="600" text-anchor="middle">Patterns</text>
+          <text x="155" y="125" fill="#fb923c" font-size="8" text-anchor="middle">RAG decomposition</text>
+
+          <!-- Lower-right: Security -->
+          <line x1="380" y1="160" x2="460" y2="230" stroke="#2a3048" stroke-width="1"/>
+          <rect x="420" y="220" width="120" height="40" rx="6" fill="#1c2030" stroke="#2a3048" stroke-width="1"/>
+          <text x="480" y="245" fill="#8892a6" font-size="10" font-weight="600" text-anchor="middle">Security</text>
+          <text x="430" y="200" fill="#f87171" font-size="8" text-anchor="middle">eval pipeline trust boundary</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <div class="cta-box">
+      Open your AI system's primary dashboard. If it shows latency and error rate but not outcome quality, you've found the gap — add <strong>one evaluation-score metric</strong> to that dashboard today.
+    </div>
+
+    <!-- Share block -->
+    <div class="share-block">
+      <span class="share-label">Share the reframe:</span>
+      <a class="share-x" id="shareX" href="#" target="_blank" rel="noopener">𝕏 Post</a>
+      <a class="share-li" id="shareLi" href="#" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
+
+  </main>
+</div>
+
+<footer>
+  <div class="cite-list">
+    <p><strong>[1]</strong> Datadog LLM Observability product documentation and launch announcements, 2024–2025. Traces LLM chains with quality annotations (relevance, faithfulness, token usage per span) that core APM cannot compute. The separate product exists because the instrumentation gap cannot be closed by adding fields to existing APM spans.</p>
+    <p><strong>[2]</strong> Arize Phoenix open-source LLM evaluation and observability framework, 2024–2025. Evaluation scores written back into production traces as span attributes. Continuous evaluation on sampled traffic reduces mean-time-to-detection of quality drift from days to minutes, versus batch evaluation that only runs at deploy boundaries.</p>
+    <p><strong>[3]</strong> Vector database operator postmortems and production incident reports documenting retrieval-relevance degradation invisible to standard operational metrics, Q1 2025. Named systems: Pinecone Serverless (HNSW index fragmentation), OpenAI text-embedding-3-small (embedding drift), Cohere rerank-english-v3.0, LlamaIndex, LangSmith tracing. All operational metrics within SLO; all outcomes degraded.</p>
+  </div>
+  <div class="foot-links">
+    <a href="https://iggym.github.io/production-ai-patterns/">← Production AI Patterns</a>
+    <a href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false">↑ Back to top</a>
+  </div>
+</footer>
+
+<button id="scroll-top" aria-label="Scroll to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+(function(){
+  // Progress bar
+  const prog = document.getElementById('progress');
+  function updateProgress(){
+    const h = document.documentElement.scrollHeight - window.innerHeight;
+    const pct = h > 0 ? (window.scrollY / h) * 100 : 0;
+    prog.style.width = Math.min(pct, 100) + '%';
+  }
+  window.addEventListener('scroll', updateProgress, {passive:true});
+  updateProgress();
+
+  // Scroll-to-top button
+  const stb = document.getElementById('scroll-top');
+  window.addEventListener('scroll', function(){
+    stb.classList.toggle('show', window.scrollY > 400);
+  }, {passive:true});
+
+  // Hamburger / drawer
+  const ham = document.getElementById('hamburger');
+  const drawer = document.getElementById('drawer');
+  const overlay = document.getElementById('drawer-overlay');
+  function openDrawer(){ drawer.classList.add('open'); overlay.classList.add('open'); }
+  function closeDrawer(){ drawer.classList.remove('open'); overlay.classList.remove('open'); }
+  ham.addEventListener('click', function(){ drawer.classList.contains('open') ? closeDrawer() : openDrawer(); });
+  overlay.addEventListener('click', closeDrawer);
+  drawer.querySelectorAll('a').forEach(function(a){ a.addEventListener('click', closeDrawer); });
+
+  // Active section highlighting in rail
+  const sections = document.querySelectorAll('article section, article h2, .pull-quote');
+  const railLinks = document.querySelectorAll('#rail nav a');
+  function updateActive(){
+    let current = '';
+    sections.forEach(function(s){
+      const id = s.id || (s.closest('[id]') && s.closest('[id]').id);
+      if(id && window.scrollY >= (s.offsetTop - 120)){
+        current = id;
+      }
+    });
+    // Also check h2s
+    document.querySelectorAll('article h2[id]').forEach(function(h){
+      if(window.scrollY >= (h.offsetTop - 120)) current = h.id;
+    });
+    railLinks.forEach(function(a){
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+  window.addEventListener('scroll', updateActive, {passive:true});
+  updateActive();
+
+  // Spectrum slider
+  const slider = document.getElementById('specSlider');
+  const specText = document.getElementById('specText');
+  const specCall = document.getElementById('specCall');
+  const specDecision = document.getElementById('specDecision');
+  slider.addEventListener('input', function(){
+    const v = parseInt(this.value);
+    if(v < 30){
+      specCall.style.opacity = '1';
+      specDecision.style.opacity = '0.35';
+      specText.textContent = '← Call-layer view. Everything looks healthy. But you\'re blind to semantic quality.';
+    } else if(v > 70){
+      specCall.style.opacity = '0.35';
+      specDecision.style.opacity = '1';
+      specText.textContent = '→ Decision-layer view. Now you see the degradation the green dashboard hid.';
+    } else {
+      specCall.style.opacity = '0.7';
+      specDecision.style.opacity = '0.7';
+      specText.textContent = 'Both layers matter — but only the decision layer catches the failure mode.';
+    }
+  });
+
+  // Architecture SVG hover tooltips
+  const archSvg = document.getElementById('archSvg');
+  const archTip = document.getElementById('archTip');
+  const layers = archSvg.querySelectorAll('.arch-layer');
+  layers.forEach(function(layer){
+    layer.style.cursor = 'pointer';
+    layer.addEventListener('mouseenter', function(e){
+      const tip = this.getAttribute('data-tip');
+      if(!tip) return;
+      archTip.textContent = tip;
+      archTip.style.opacity = '1';
+      const rect = this.getBoundingClientRect();
+      const parentRect = this.closest('.arch-svg-wrap').getBoundingClientRect();
+      archTip.style.left = (rect.left - parentRect.left + 10) + 'px';
+      archTip.style.top = (rect.bottom - parentRect.top + 4) + 'px';
+    });
+    layer.addEventListener('mouseleave', function(){
+      archTip.style.opacity = '0';
+    });
+    // Touch support
+    layer.addEventListener('touchstart', function(e){
+      e.preventDefault();
+      const tip = this.getAttribute('data-tip');
+      if(!tip) return;
+      if(archTip.style.opacity === '1' && archTip.textContent === tip){
+        archTip.style.opacity = '0';
+        return;
+      }
+      archTip.textContent = tip;
+      archTip.style.opacity = '1';
+      const rect = this.getBoundingClientRect();
+      const parentRect = this.closest('.arch-svg-wrap').getBoundingClientRect();
+      archTip.style.left = (rect.left - parentRect.left + 10) + 'px';
+      archTip.style.top = (rect.bottom - parentRect.top + 4) + 'px';
+    });
+  });
+
+  // Share links
+  const shareText = 'Model health ≠ outcome health. Your AI dashboards instrument the call, not the consequence. The pattern: Decision-Layer Observability.';
+  const shareUrl = 'https://iggym.github.io/production-ai-patterns/deaf-at-the-wheel';
+  document.getElementById('shareX').href = 'https://x.com/intent/tweet?text=' + encodeURIComponent(shareText) + '&url=' + encodeURIComponent(shareUrl);
+  document.getElementById('shareLi').href = 'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl);
+
+  // Reduced motion: disable card flip animation, just toggle content
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    document.querySelectorAll('.recall-card').forEach(function(card){
+      card.addEventListener('click', function(){
+        const inner = this.querySelector('.recall-inner');
+        const front = this.querySelector('.recall-front');
+        const back = this.querySelector('.recall-back');
+        const isFlipped = this.classList.contains('flipped');
+        if(isFlipped){
+          front.style.display = 'flex';
+          back.style.display = 'none';
+        } else {
+          front.style.display = 'none';
+          back.style.display = 'flex';
+        }
+      });
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
