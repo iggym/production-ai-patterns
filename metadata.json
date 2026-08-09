@@ -9,42 +9,41 @@
   },
   "articles": [
     {
-  "title": "The Unbounded Memory Trap",
-  "hook": "Accumulated context isn't a superpower; it is an unpatched attack surface.",
-  "date": "2024-06-14",
-  "status": "published",
-  "pinned": false,
-  "reading_time_minutes": 5,
-  "tags": ["context-management", "security", "multi-agent", "pattern"],
-  "path": "articles/unbounded-memory-trap.html",
-  "id": "ctx-firewall-001",
-  "slug": "unbounded-memory-trap",
-  "type": "pattern",
-  "research_window": ["2024-05-17", "2024-06-14"]
-},
-    {
-  "title": "Deaf at the Wheel",
-  "hook": "Model health ≠ outcome health. Your AI dashboards instrument the call, not the consequence.",
-  "date": "2025-04-14",
-  "status": "published",
-  "pinned": false,
-  "reading_time_minutes": 6,
-  "tags": ["observability", "evaluation", "rag", "monitoring", "semantic-drift", "pattern"],
-  "path": "articles/deaf-at-the-wheel.html",
-  "id": "decision-obs-001",
-  "slug": "deaf-at-the-wheel",
-  "type": "pattern",
-  "research_window": ["2025-03-10", "2025-04-14"]
-},
-    {
-      "title": "Reading the Pattern Language",
-      "hook": "How this catalog is organized, what a 'pattern' means here, and how to navigate from symptom to solution when your system is breaking in production.",
-      "date": "2025-01-15",
+      "title": "The Cost Gate",
+      "hook": "Inference spend can spike orders of magnitude faster than traffic. The cost gate wraps high-cost model calls in a budget-aware gate that degrades gracefully instead of blowing up the billing dashboard at 2 AM.",
+      "date": "2025-04-22",
       "status": "draft",
-      "pinned": true,
+      "reading_time_minutes": 10,
+      "tags": [
+        "cost",
+        "governance",
+        "serving"
+      ],
+      "path": "articles/the-cost-gate.html"
+    },
+    {
+      "title": "Deaf at the Wheel",
+      "hook": "Model health ≠ outcome health. Your AI dashboards instrument the call, not the consequence.",
+      "date": "2025-04-14",
+      "status": "published",
+      "pinned": false,
       "reading_time_minutes": 6,
-      "tags": ["meta", "orientation"],
-      "path": "articles/reading-the-pattern-language.html"
+      "tags": [
+        "observability",
+        "evaluation",
+        "rag",
+        "monitoring",
+        "semantic-drift",
+        "pattern"
+      ],
+      "path": "articles/deaf-at-the-wheel.html",
+      "id": "decision-obs-001",
+      "slug": "deaf-at-the-wheel",
+      "type": "pattern",
+      "research_window": [
+        "2025-03-10",
+        "2025-04-14"
+      ]
     },
     {
       "title": "Circuit Breaker for Model Inference",
@@ -52,17 +51,47 @@
       "date": "2025-03-10",
       "status": "draft",
       "reading_time_minutes": 12,
-      "tags": ["reliability", "serving", "resilience"],
+      "tags": [
+        "reliability",
+        "serving",
+        "resilience"
+      ],
       "path": "articles/circuit-breaker-model-inference.html"
     },
     {
-      "title": "The Cost Gate",
-      "hook": "Inference spend can spike orders of magnitude faster than traffic. The cost gate wraps high-cost model calls in a budget-aware gate that degrades gracefully instead of blowing up the billing dashboard at 2 AM.",
-      "date": "2025-04-22",
+      "title": "Reading the Pattern Language",
+      "hook": "How this catalog is organized, what a 'pattern' means here, and how to navigate from symptom to solution when your system is breaking in production.",
+      "date": "2025-01-15",
       "status": "draft",
-      "reading_time_minutes": 10,
-      "tags": ["cost", "governance", "serving"],
-      "path": "articles/the-cost-gate.html"
+      "pinned": true,
+      "reading_time_minutes": 6,
+      "tags": [
+        "meta",
+        "orientation"
+      ],
+      "path": "articles/reading-the-pattern-language.html"
+    },
+    {
+      "title": "The Unbounded Memory Trap",
+      "hook": "Accumulated context isn't a superpower; it is an unpatched attack surface.",
+      "date": "2024-06-14",
+      "status": "published",
+      "pinned": false,
+      "reading_time_minutes": 5,
+      "tags": [
+        "context-management",
+        "security",
+        "multi-agent",
+        "pattern"
+      ],
+      "path": "articles/unbounded-memory-trap.html",
+      "id": "ctx-firewall-001",
+      "slug": "unbounded-memory-trap",
+      "type": "pattern",
+      "research_window": [
+        "2024-05-17",
+        "2024-06-14"
+      ]
     }
   ]
 }
