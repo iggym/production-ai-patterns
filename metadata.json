@@ -92,26 +92,19 @@
         "2024-05-17",
         "2024-06-14"
       ]
-    }, # Requirements for metadata.json snippet 
-
-## What the snippet looks like
-
-Every content-generation prompt's final output section ends with a JSON object shaped like this:
-
-```json
-{
-  "id": "0001",
-  "slug": "context-rot-is-not-a-window-problem",
-  "title": "Context Rot Is Not a Context-Window Problem",
-  "hook": "Your context window isn't full. It's rotten. Those are different problems with different fixes.",
-  "path": "articles/context-rot-is-not-a-window-problem.html",
-  "date": "2026-05-12",
+    },{
+  "id": "0008",
+  "slug": "quarantined-feedback-is-not-a-retraining-problem",
+  "title": "Quarantined Feedback Is Not a Retraining Problem",
+  "hook": "Your model isn't learning from the world. It's learning from its own shadow in your warehouse.",
+  "path": "articles/quarantined-feedback-is-not-a-retraining-problem.html",
+  "date": "2026-02-18",
   "status": "published",
   "format": "pattern",
-  "tags": ["context-engineering", "context-rot", "architecture"],
-  "reading_time_minutes": 9,
-  "pinned": true,
-  "research_window": "2026-03-24 to 2026-05-12"
+  "tags": ["feedback-loops", "data-drift", "safe-retraining", "provenance"],
+  "reading_time_minutes": 6,
+  "pinned": false,
+  "research_window": "2026-01-14 to 2026-02-18"
 }
   ]
 }
