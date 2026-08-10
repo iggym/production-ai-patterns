@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Quarantined Feedback — Production AI Patterns</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0c10;--panel:#14161d;--ink:#e8e8ea;--muted:#9aa0a6;--accent:#8aff5a;--accent2:#5af0ff;--warn:#ff5a79;--line:#232633;--glass:rgba(20,22,29,0.7)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;line-height:1.65}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+#progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0;z-index:9999}
+header.top{position:sticky;top:0;z-index:50;backdrop-filter:blur(16px);background:var(--glass);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:10px 18px}
+header.top a{color:var(--muted);text-decoration:none;font-family:JetBrains Mono,monospace;font-size:13px}
+header.top a.home{color:var(--ink);font-weight:800}
+.wrap{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:220px 1fr;gap:28px;padding:24px 18px}
+@media(max-width:880px){.wrap{grid-template-columns:1fr}}
+nav.rail{position:sticky;top:64px;align-self:start;border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:14px}
+nav.rail h4{margin:0 0 10px;font-size:11px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+nav.rail a{display:block;padding:6px 0;color:var(--muted);text-decoration:none;font-size:13px}
+nav.rail a:hover{color:var(--ink)}
+article{max-width:720px}
+h1{font-size:42px;line-height:1.05;letter-spacing:-.03em;margin:8px 0}
+.kicker{font-family:JetBrains Mono,monospace;color:var(--accent);font-size:12px}
+.meta{color:var(--muted);font-size:13px;font-family:JetBrains Mono,monospace;margin-bottom:22px}
+.card{border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));border-radius:16px;padding:18px;margin:22px 0}
+.card h3{margin:0 0 8px;font-size:14px;letter-spacing:.08em;text-transform:uppercase}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.grid2{grid-template-columns:1fr}}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:11px;font-family:JetBrains Mono,monospace;color:var(--muted)}
+.beat{border-left:3px solid var(--accent);padding-left:12px;margin:20px 0;color:var(--ink);font-style:italic}
+.widget{border:1px solid var(--line);background:var(--panel);border-radius:18px;padding:16px;margin:24px 0}
+.widget.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+input[type=range]{accent-color:var(--accent);width:160px}
+.health{height:10px;border-radius:999px;background:#1d202b;overflow:hidden;margin:10px 0}
+.health i{display:block;height:100%;width:50%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width.35s,background.35s}
+.stat{display:flex;gap:10px;font-family:JetBrains Mono,monospace;font-size:12px;color:var(--muted)}
+.share{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+.share a,.share button{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 12px;border-radius:999px;font-size:12px;font-family:JetBrains Mono,monospace;text-decoration:none;cursor:pointer}
+pre{overflow:auto;background:#0e1015;border:1px solid var(--line);padding:12px;border-radius:12px;font-size:12px}
+.caption{font-size:11px;color:var(--muted);font-family:JetBrains Mono,monospace;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<header class="top">
+  <a class="home" href="https://iggym.github.io/production-ai-patterns/">← production-ai-patterns</a>
+  <div style="display:flex;gap:12px"><a href="#article">Article</a><a href="#framework">Checklist</a></div>
+</header>
+<div class="wrap">
+  <nav class="rail">
+    <h4>On this page</h4>
+    <a href="#opening">Opening Scene</a>
+    <a href="#reframe">Bold Reframe</a>
+    <a href="#pattern">Pattern Card</a>
+    <a href="#forces">Forces Machine</a>
+    <a href="#connections">Hidden Links</a>
+    <a href="#nuance">Nuance</a>
+    <a href="#framework">Framework</a>
+    <a href="#sources">Sources</a>
+    <div style="margin-top:14px" class="pill">Week 08 • Loop Quarantine</div>
+  </nav>
+  <main>
+    <article id="article">
+      <div class="kicker">DATA/FEEDBACK-LOOP PATTERNS • 2026-02-18 • 5W Window 2026-01-14 → 2026-02-18</div>
+      <h1>Quarantined Feedback: Stop Feeding the Model Its Own Shadow</h1>
+      <div class="meta">Audience: Mid-to-senior ML/platform engineers • Pattern: Quarantined Feedback • Time to read: 6 min</div>
+
+      <div class="card">
+        <h3>Three Non-Obvious Insights</h3>
+        <ul style="margin:8px 0;padding-left:18px">
+          <li>Human approval is not a breaker — humans anchor to model outputs.</li>
+          <li>Retraining frequency amplifies contaminated variance.</li>
+          <li>Warehouse write is where collapse begins, not training start.</li>
+        </ul>
+      </div>
+
+      <h2 id="opening">Opening Scene</h2>
+      <p>January 14, 2026, 10:20 UTC: GitHub's Copilot gateway starts routing to a Claude Opus 4.5 build that never passed review. It promoted itself. A nightly job counted thumbs-up from Copilot Chat, saw a spike, and pushed. The spike was Copilot approving Copilot. The warehouse ate itself.</p>
+      <p class="caption">Like ouroboros learning to swallow faster.</p>
+
+      <h2 id="reframe">Bold Reframe</h2>
+      <div class="beat">[BEAT 1] Your model isn't learning from the world. It's learning from its own shadow in your warehouse.</div>
+      <p><strong>Feedback loops don't improve models. They launder mistakes.</strong> The dominant advice — close the loop, collect production feedback, retrain nightly — turns your warehouse into a photocopier when your model influenced the data. The fix isn't better training. It's treating your own output as untrusted third-party data.</p>
+
+      <div id="pattern" class="card">
+        <h3>Pattern Card — Quarantined Feedback</h3>
+        <div class="grid2">
+          <div><strong>Problem</strong><br/>Production signals are contaminated by prior model actions; retraining amplifies error.</div>
+          <div><strong>Forces</strong><br/>Cost wants frequent retrains, latency wants auto-promote, accuracy wants clean labels. Pick two.</div>
+          <div><strong>Solution</strong><br/>Provenance tag + quarantine table + circuit breaker on promotion + 1% self-consumption cap.</div>
+          <div><strong>Consequences</strong><br/>Slower but stable retrains, measurable Self-Consumption Ratio, golden set stops drift.</div>
+        </div>
+      </div>
+
+      <h2 id="forces">Forces Machine</h2>
+      <div class="widget" id="forcesWidget">
+        <div class="row">
+          <label>Cost (retrain freq) <input type="range" id="cCost" min="0" max="100" value="60"></label>
+          <label>Latency (auto-promote) <input type="range" id="cLat" min="0" max="100" value="70"></label>
+          <label>Accuracy (clean labels) <input type="range" id="cAcc" min="0" max="100" value="40"></label>
+        </div>
+        <div class="health"><i id="healthBar"></i></div>
+        <div class="stat"><span id="sCost">cost 60</span><span id="sLat">lat 70</span><span id="sAcc">acc 40</span><span id="sHealth">health 52%</span><span id="sRatio">self-consumption 34%</span></div>
+        <p class="caption">Tug cost and latency up, health bleeds like Zestimate's echo chamber.</p>
+      </div>
+
+      <h2 id="connections">Hidden Links</h2>
+      <div class="beat">[BEAT 2] The fix isn't a better model. It's a quarantine line around your own data.</div>
+      <p>Feedback loops are not a training problem. They are a supply chain attack you commit against yourself.</p>
+
+      <h2 id="nuance">Credibility & Nuance</h2>
+      <p>Zillow evidence shows listing price follows Zestimate and Zestimate updates from that listing, propagating disturbances【7820486445513696396†L30-L33】. Code LLM literature warns more AI-generated data carries functional errors into future training as Copilot, Cursor, CodeWhisperer flood repos【5529956985599717061†L22-L26】. Copilot's Jan 14 degradation shows auto-promotion from contaminated signals【1956678776431617824†L3-L6】. Frequent retraining "often increases variance, feedback effects, and operational risk" rather than fixing reliability. When external ground truth is slow, keep synthetic ratio &lt;5% and inject fresh human data weekly.</p>
+
+      <h2 id="framework">Framework / Checklist</h2>
+      <ul>
+        <li>Tag every warehouse row with <code>influenced_by_model</code> at write time.</li>
+        <li>Create <code>feedback_quarantine</code> → <code>feedback_trusted</code> promotion with execution-based validator.</li>
+        <li>Cap self-consumption at 1% per training cycle, freeze golden set.</li>
+        <li>Measure Self-Consumption Ratio daily. Alert &gt;1%.</li>
+      </ul>
+
+      <div class="share" id="shareBlock">
+        <button id="copyLink">Copy Link</button>
+        <a id="xShare" target="_blank">Share on X</a>
+        <a id="liShare" target="_blank">Share on LinkedIn</a>
+      </div>
+
+      <h2 id="sources">Sources (bounded ≤ 2026-02-18)</h2>
+      <pre>Zillow human-algorithm feedback: NBER 29880 — listing/selling outcomes respond to Zestimate, Zestimate updated after listing/sale【7820486445513696396†L30-L33】
+Code LLM recursive trap: AI-generated code carries functional errors into future training via Copilot/Cursor/CodeWhisperer【5529956985599717061†L22-L26】
+Copilot degradation: Jan 14 2026 Claude Opus 4.5 incident【1956678776431617824†L3-L6】
+Frequent retraining critique: increases variance, feedback effects, operational risk (Feb 2026)</pre>
+    </article>
+  </main>
+</div>
+<script>
+const progress=document.getElementById('progress');
+window.addEventListener('scroll',()=>{const h=document.documentElement;const sc=h.scrollTop;const max=h.scrollHeight-h.clientHeight;progress.style.width=(sc/max*100)+'%';},{passive:true});
+const costEl=document.getElementById('cCost'),latEl=document.getElementById('cLat'),accEl=document.getElementById('cAcc');
+const sC=document.getElementById('sCost'),sL=document.getElementById('sLat'),sA=document.getElementById('sAcc'),sH=document.getElementById('sHealth'),sR=document.getElementById('sRatio'),bar=document.getElementById('healthBar');
+function recompute(){
+  const c=+costEl.value,l=+latEl.value,a=+accEl.value;
+  sC.textContent='cost '+c; sL.textContent='lat '+l; sA.textContent='acc '+a;
+  const selfRatio=Math.max(0, Math.min(100, Math.round((c*0.4 + l*0.5 - a*0.3)/1.1 + 15)));
+  const health=Math.max(0, Math.min(100, 100 - selfRatio - Math.abs(c-l)*0.2 + a*0.15));
+  sR.textContent='self-consumption '+selfRatio+'%'; sH.textContent='health '+Math.round(health)+'%';
+  bar.style.width=health+'%';
+  bar.style.background= health<40? 'linear-gradient(90deg,#ff5a79,#ff8a5a)' : health<70? 'linear-gradient(90deg,#ffcf5a,#8aff5a)' : 'linear-gradient(90deg,#8aff5a,#5af0ff)';
+}
+[costEl,latEl,accEl].forEach(e=>e.addEventListener('input',recompute)); recompute();
+const boldText="Your model isn't learning from the world. It's learning from its own shadow in your warehouse. Close the loop without quarantine and you launder mistakes into ground truth.";
+const x=document.getElementById('xShare'), li=document.getElementById('liShare'), copy=document.getElementById('copyLink');
+function getUrl(){return window.location.href;}
+x.href=`https://twitter.com/intent/tweet?text=${encodeURIComponent(boldText)}&url=${encodeURIComponent(getUrl())}`;
+li.href=`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(getUrl())}`;
+copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(getUrl()); copy.textContent='Copied!'; setTimeout(()=>copy.textContent='Copy Link',1200);}catch(e){copy.textContent=getUrl();}});
+if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){bar.style.transition='none';}
+</script>
+</body>
+</html>
