@@ -92,19 +92,25 @@
         "2024-05-17",
         "2024-06-14"
       ]
-    },{
-  "id": "0008",
-  "slug": "quarantined-feedback-is-not-a-retraining-problem",
-  "title": "Quarantined Feedback Is Not a Retraining Problem",
-  "hook": "Your model isn't learning from the world. It's learning from its own shadow in your warehouse.",
-  "path": "articles/quarantined-feedback-is-not-a-retraining-problem.html",
-  "date": "2026-02-18",
-  "status": "published",
-  "format": "pattern",
-  "tags": ["feedback-loops", "data-drift", "safe-retraining", "provenance"],
-  "reading_time_minutes": 6,
-  "pinned": false,
-  "research_window": "2026-01-14 to 2026-02-18"
-}, 
+    },
+    {
+      "id": "0008",
+      "slug": "quarantined-feedback-is-not-a-retraining-problem",
+      "title": "Quarantined Feedback Is Not a Retraining Problem",
+      "hook": "Your model isn't learning from the world. It's learning from its own shadow in your warehouse.",
+      "path": "articles/quarantined-feedback-is-not-a-retraining-problem.html",
+      "date": "2026-02-18",
+      "status": "published",
+      "format": "pattern",
+      "tags": [
+        "feedback-loops",
+        "data-drift",
+        "safe-retraining",
+        "provenance"
+      ],
+      "reading_time_minutes": 6,
+      "pinned": false,
+      "research_window": "2026-01-14 to 2026-02-18"
+    }
   ]
 }
