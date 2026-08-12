@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bleeding Tokens Silently: The Token-Bucket Proxy Circuit Breaker</title>
+    <meta name="description" content="An architectural pattern for real-time cost governance and token-bucket circuit breaking in production AI systems.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-glass: rgba(30, 41, 59, 0.7);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.2);
+            --border: #334155;
+            --danger: #f43f5e;
+            --success: #10b981;
+            --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-glass: rgba(255, 255, 255, 0.85);
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --accent: #0284c7;
+            --accent-glow: rgba(2, 132, 199, 0.15);
+            --border: #e2e8f0;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        #progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: var(--accent);
+            width: 0%;
+            z-index: 1001;
+            transition: width 0.1s linear;
+        }
+
+        header.topbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            z-index: 1000;
+        }
+
+        .nav-left, .nav-right { display: flex; align-items: center; gap: 1.5rem; }
+        .topbar a {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: var(--transition);
+        }
+        .topbar a:hover { color: var(--accent); }
+        .breadcrumb { color: var(--text-secondary); font-size: 0.85rem; }
+
+        .theme-toggle {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: var(--transition);
+        }
+        .theme-toggle:hover { border-color: var(--accent); }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 260px minmax(0, 1fr);
+            max-width: 1300px;
+            margin: 60px auto 0 auto;
+            padding: 2rem;
+            gap: 3rem;
+        }
+
+        aside.rail {
+            position: sticky;
+            top: 90px;
+            height: calc(100vh - 120px);
+            overflow-y: auto;
+            padding-right: 1rem;
+            border-right: 1px solid var(--border);
+        }
+
+        aside.rail h3 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        aside.rail ul { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
+        aside.rail a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: var(--transition);
+            display: block;
+        }
+        aside.rail a:hover, aside.rail a.active { color: var(--accent); padding-left: 0.25rem; }
+
+        main { max-width: 800px; }
+
+        .hero {
+            padding: 3rem 0 2rem 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: clamp(2.2rem, 4vw, 3.5rem);
+            font-weight: 700;
+            line-height: 1.15;
+            letter-spacing: -0.02em;
+            margin-bottom: 1.5rem;
+        }
+
+        .meta-tags {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            margin-bottom: 1.5rem;
+        }
+
+        .spectrum {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent);
+            padding: 1.5rem;
+            border-radius: 0 8px 8px 0;
+            margin: 2rem 0;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        h2 { font-size: 1.8rem; margin: 3rem 0 1rem 0; font-weight: 600; }
+        h3 { font-size: 1.3rem; margin: 2rem 0 0.75rem 0; font-weight: 600; }
+        p { margin-bottom: 1.5rem; color: var(--text-secondary); font-size: 1.05rem; }
+        strong { color: var(--text-primary); }
+
+        .pattern-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 3rem 0;
+        }
+        .pattern-card h4 {
+            font-size: 1.1rem;
+            color: var(--accent);
+            margin-bottom: 1rem;
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+        }
+        .pattern-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+        }
+        .pattern-item h5 { font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.3rem; }
+        .pattern-item p { font-size: 0.9rem; margin-bottom: 0; }
+
+        .pull-quote {
+            border-left: 2px solid var(--accent);
+            padding: 1.5rem;
+            margin: 2.5rem 0;
+            background: var(--bg-secondary);
+            border-radius: 0 8px 8px 0;
+            position: relative;
+        }
+        .pull-quote p { font-size: 1.25rem; font-style: italic; color: var(--text-primary); margin-bottom: 1rem; }
+        .share-actions { display: flex; gap: 1rem; align-items: center; }
+        .share-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 0.3rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: var(--transition);
+        }
+        .share-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* Bespoke Centerpiece Widget */
+        .widget-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 3rem 0;
+        }
+        .widget-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .toggle-btn {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: var(--transition);
+        }
+        .toggle-btn.active {
+            background: var(--accent-glow);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .widget-visual {
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            min-height: 140px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        /* Three Things Tracker */
+        .tracker-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            margin: 3rem 0;
+        }
+        .tracker-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+            opacity: 0.5;
+            transition: var(--transition);
+        }
+        .tracker-item:last-child { border-bottom: none; }
+        .tracker-item.unlocked { opacity: 1; }
+        .tracker-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            margin-top: 0.1rem;
+        }
+        .tracker-item.unlocked .tracker-icon {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--bg-primary);
+        }
+
+        figure { margin: 2rem 0; }
+        figcaption {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-top: 0.75rem;
+            font-family: var(--font-mono);
+        }
+
+        .scroll-reveal {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+        .scroll-reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 3rem 2rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 4rem;
+        }
+        footer a { color: var(--accent); text-decoration: none; }
+
+        @media (max-width: 880px) {
+            .layout { grid-template-columns: 1fr; padding: 1rem; }
+            aside.rail { display: none; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            .scroll-reveal { opacity: 1; transform: none; transition: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="progress"></div>
+
+    <header class="topbar">
+        <div class="nav-left">
+            <a href="https://iggym.github.io/production-ai-patterns/">← Production AI Patterns</a>
+            <span class="breadcrumb">/ Cost Governance / Token Circuit Breakers</span>
+        </div>
+        <div class="nav-right">
+            <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+        </div>
+    </header>
+
+    <div class="layout">
+        <aside class="rail">
+            <h3>Contents</h3>
+            <ul>
+                <li><a href="#scene" class="rail-link">Opening Scene</a></li>
+                <li><a href="#reframe" class="rail-link">The Bold Reframe</a></li>
+                <li><a href="#pattern" class="rail-link">Pattern Anatomy</a></li>
+                <li><a href="#widget" class="rail-link">Interactive Forces</a></li>
+                <li><a href="#architecture" class="rail-link">Layered Pipeline</a></li>
+                <li><a href="#insights" class="rail-link">Three Things Needed</a></li>
+            </ul>
+        </aside>
+
+        <main>
+            <section class="hero" id="scene">
+                <div class="meta-tags">
+                    <span>DATE: 2026-03-14</span>
+                    <span>TOPIC: COST GOVERNANCE</span>
+                    <span>READING TIME: 6 MIN</span>
+                </div>
+                <h1>Bleeding Tokens Silently</h1>
+                <p>Modern infrastructure inherits a fatal illusion. Engineers treat Large Language Models as stateless, deterministic functions akin to traditional microservices. A traditional service fails when CPU throttles or memory overflows. An LLM service does not crash when overburdened; it simply consumes capital at exponential velocity while returning HTTP 200 OK statuses.</p>
+            </section>
+
+            <div class="spectrum" id="reframe">
+                <strong>The Bold Reframe:</strong> Financial governance for production AI is not an accounting audit; it is a real-time edge control-plane problem requiring synchronous token-bucket circuit breaking before inference executes.
+            </div>
+
+            <section class="scroll-reveal">
+                <h2>The Illusion of Safety</h2>
+                <p>Before production traffic scales, teams assume financial governance is an accounting task managed via monthly cloud invoices and retrospective dashboards. After a single recursive agent loop drains a departmental budget in forty minutes, the paradigm shifts entirely. Financial governance is not an audit exercise; it is a real-time control-plane challenge requiring sub-millisecond edge token budgeting.</p>
+                <p>When automated workflows loop indefinitely, standard monitoring dashboards register green health checks while the corporate bank account drains.</p>
+            </section>
+
+            <div class="pull-quote">
+                <p>"Cost governance implemented inside application logic is merely a suggestion written in Python."</p>
+                <div class="share-actions">
+                    <span style="font-size: 0.8rem; color: var(--text-secondary);">Share quote:</span>
+                    <a href="https://twitter.com/intent/tweet?text=Cost%20governance%20implemented%20inside%20application%20logic%20is%20merely%20a%20suggestion%20written%20in%20Python." target="_blank" class="share-btn">X / Twitter</a>
+                    <a href="https://www.linkedin.com/sharing/share-offsite/?url=https://iggym.github.io/production-ai-patterns/" target="_blank" class="share-btn">LinkedIn</a>
+                </div>
+            </div>
+
+            <section class="pattern-card" id="pattern">
+                <h4>Pattern Reference Card</h4>
+                <div class="pattern-grid">
+                    <div class="pattern-item">
+                        <h5>Problem</h5>
+                        <p>Runaway recursive agent loops drain budgets silently while returning healthy HTTP 200 responses.</p>
+                    </div>
+                    <div class="pattern-item">
+                        <h5>Forces</h5>
+                        <p>Latency vs. strict token counting; async app runtime vs. sync proxy enforcement.</p>
+                    </div>
+                    <div class="pattern-item">
+                        <h5>Solution</h5>
+                        <p>Token-Bucket Proxy Circuit Breakers intercept requests at the edge gateway before model invocation.</p>
+                    </div>
+                    <div class="pattern-item">
+                        <h5>Consequences</h5>
+                        <p>Eliminates surprise billing spikes; requires Redis state synchronization across edge nodes.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="widget-container" id="widget">
+                <h3>Interactive Forces Playground</h3>
+                <p>Toggle individual architectural forces to simulate system stability under high concurrent load:</p>
+                <div class="widget-controls">
+                    <button class="toggle-btn active" onclick="toggleForce('gateway')">Edge Proxy Gateway</button>
+                    <button class="toggle-btn active" onclick="toggleForce('redis')">Redis State Bucket</button>
+                    <button class="toggle-btn active" onclick="toggleForce('router')">Model Router</button>
+                </div>
+                <div class="widget-visual" id="widget-status">
+                    <span id="status-text" style="color: var(--success); font-weight: 600;">System Stable: Token velocity within budgeted thresholds.</span>
+                </div>
+            </section>
+
+            <section class="scroll-reveal" id="architecture">
+                <h2>The Proxy Firewall</h2>
+                <p>Naïve implementations attempt to calculate costs inside the application runtime. This introduces fatal race conditions under asynchronous concurrency. By the time an application thread evaluates accumulated token expenditure, ten parallel worker threads have already dispatched heavy inference payloads.</p>
+                
+                <figure>
+                    <svg viewBox="0 0 700 160" width="100%" style="background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border);">
+                        <rect x="20" y="40" width="120" height="80" rx="6" fill="var(--bg-secondary)" stroke="var(--border)" />
+                        <text x="80" y="85" fill="var(--text-primary)" font-size="12" text-anchor="middle" font-family="var(--font-mono)">Client App</text>
+                        
+                        <line x1="140" y1="80" x2="180" y2="80" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrow)" />
+                        
+                        <rect x="180" y="40" width="140" height="80" rx="6" fill="var(--bg-secondary)" stroke="var(--border)" />
+                        <text x="250" y="75" fill="var(--text-primary)" font-size="12" text-anchor="middle" font-family="var(--font-mono)">Kong Gateway</text>
+                        <text x="250" y="95" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="var(--font-mono)">+ Envoy Lua</text>
+
+                        <line x1="320" y1="80" x2="360" y2="80" stroke="var(--accent)" stroke-width="2" />
+
+                        <rect x="360" y="40" width="140" height="80" rx="6" fill="var(--bg-secondary)" stroke="var(--border)" />
+                        <text x="430" y="75" fill="var(--text-primary)" font-size="12" text-anchor="middle" font-family="var(--font-mono)">Redis State</text>
+                        <text x="430" y="95" fill="var(--text-secondary)" font-size="10" text-anchor="middle" font-family="var(--font-mono)">Token Bucket</text>
+
+                        <line x1="500" y1="80" x2="540" y2="80" stroke="var(--accent)" stroke-width="2" />
+
+                        <rect x="540" y="40" width="140" height="80" rx="6" fill="var(--bg-secondary)" stroke="var(--border)" />
+                        <text x="610" y="85" fill="var(--text-primary)" font-size="12" text-anchor="middle" font-family="var(--font-mono)">Model Router</text>
+                    </svg>
+                    <figcaption>Figure 1: Synchronous edge interception routing through distributed state validation.</figcaption>
+                </figure>
+            </section>
+
+            <section class="tracker-box" id="insights">
+                <h3>Three Things They Didn't Know They Needed</h3>
+                <div class="tracker-item" id="track-1">
+                    <div class="tracker-icon">✓</div>
+                    <div><strong>Token-Bucket Granularity:</strong> Static request rate limits fail because LLM token consumption scales non-linearly with output depth.</div>
+                </div>
+                <div class="tracker-item" id="track-2">
+                    <div class="tracker-icon">✓</div>
+                    <div><strong>Fallback Budget Awareness:</strong> Model fallbacks without token limits merely shift the financial blast radius to cheaper endpoints.</div>
+                </div>
+                <div class="tracker-item" id="track-3">
+                    <div class="tracker-icon">✓</div>
+                    <div><strong>Gateway-Level Enforcement:</strong> Runtime cost checks suffer from async race conditions; enforcement belongs at the proxy layer.</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Production AI Patterns. <a href="https://iggym.github.io/production-ai-patterns/">Home</a> | <a href="#scene">Back to top</a></p>
+    </footer>
+
+    <script>
+        // Theme Toggle
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            body.setAttribute('data-theme', currentTheme === 'light' ? '' : 'light');
+        }
+
+        // Reading Progress Bar
+        window.addEventListener('scroll', () => {
+            const winScroll = document.documentElement.scrollTop;
+            const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            const scrolled = (winScroll / height) * 100;
+            document.getElementById('progress').style.width = scrolled + '%';
+        });
+
+        // Interactive Forces Widget State
+        const state = { gateway: true, redis: true, router: true };
+        function toggleForce(key) {
+            state[key] = !state[key];
+            event.target.classList.toggle('active');
+            updateWidgetVisual();
+        }
+
+        function updateWidgetVisual() {
+            const textEl = document.getElementById('status-text');
+            if (!state.gateway) {
+                textEl.style.color = 'var(--danger)';
+                textEl.textContent = 'CRITICAL: Edge gateway disabled. Unchecked traffic flooding model provider APIs.';
+            } else if (!state.redis) {
+                textEl.style.color = 'var(--danger)';
+                textEl.textContent = 'WARNING: Redis state store offline. Falling back to uncoordinated local memory limits.';
+            } else if (!state.router) {
+                textEl.style.color = 'var(--danger)';
+                textEl.textContent = 'WARNING: Model router bypassed. Direct calls risking quota exhaustion.';
+            } else {
+                textEl.style.color = 'var(--success)';
+                textEl.textContent = 'System Stable: Token velocity within budgeted thresholds.';
+            }
+        }
+
+        // Scroll Reveal Intersection Observer
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
+
+        // Three Things Tracker Activation on Scroll
+        window.addEventListener('scroll', () => {
+            const scrollPos = window.scrollY;
+            if (scrollPos > 400) document.getElementById('track-1').classList.add('unlocked');
+            if (scrollPos > 800) document.getElementById('track-2').classList.add('unlocked');
+            if (scrollPos > 1200) document.getElementById('track-3').classList.add('unlocked');
+        });
+    </script>
+</body>
+</html>
