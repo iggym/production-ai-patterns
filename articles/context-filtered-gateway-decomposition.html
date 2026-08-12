@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context-Filtered Gateway Decomposition — Production AI Patterns</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --surface: #111827;
+      --surface-border: #1f293d;
+      --surface-hover: #1e293b;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-accent: #0284c7;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --success: #10b981;
+      --code-bg: #030712;
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--primary), var(--success));
+      width: 0%;
+      z-index: 1000;
+      transition: width 0.1s ease;
+    }
+
+    #topbar {
+      position: sticky;
+      top: 0;
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--surface-border);
+      z-index: 900;
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-left { display: flex; align-items: center; gap: 1rem; font-size: 0.875rem; }
+    .nav-left a { color: var(--primary); text-decoration: none; font-weight: 600; }
+    .nav-left a:hover { text-decoration: underline; }
+    .breadcrumb { color: var(--text-muted); }
+    .read-time { font-size: 0.8rem; color: var(--text-muted); background: var(--surface-border); padding: 0.2rem 0.6rem; border-radius: 999px; }
+
+    .layout-grid {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      max-width: 1200px;
+      margin: 0 auto;
+      gap: 2.5rem;
+      padding: 2rem 1.5rem;
+    }
+
+    #rail {
+      position: sticky;
+      top: 5rem;
+      height: fit-content;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .toc-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .toc-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.875rem; }
+    .toc-list a { color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+    .toc-list a:hover { color: var(--primary); }
+
+    main { min-width: 0; }
+
+    .hero-title {
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin-bottom: 1.5rem;
+      background: linear-gradient(135deg, #ffffff 0%, var(--text-muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .meta-bar {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--surface-border);
+      padding-bottom: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    /* Pattern Card Component */
+    .pattern-card {
+      background: var(--surface);
+      border: 1px solid var(--primary-accent);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin: 2rem 0;
+      box-shadow: 0 10px 30px -10px rgba(56, 189, 248, 0.15);
+    }
+    .pattern-card h3 { font-size: 1.1rem; color: var(--primary); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .pattern-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.875rem; }
+    .pattern-item { background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 0.5rem; border-left: 3px solid var(--primary); }
+    .pattern-item strong { display: block; color: var(--text); margin-bottom: 0.25rem; font-size: 0.75rem; text-transform: uppercase; }
+
+    /* Interactive Forces Diagram Widget */
+    .widget-container {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin: 2.5rem 0;
+    }
+    .widget-title { font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .forces-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+    .toggle-btn {
+      background: var(--bg);
+      border: 1px solid var(--surface-border);
+      color: var(--text-muted);
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .toggle-btn.active { background: var(--primary-accent); color: white; border-color: var(--primary); }
+    .simulation-output {
+      background: var(--code-bg);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-top: 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+    }
+    .sim-metric { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
+    .sim-bar-bg { height: 6px; background: var(--surface-border); border-radius: 3px; overflow: hidden; }
+    .sim-bar-fill { height: 100%; width: 50%; transition: width 0.3s ease, background-color 0.3s ease; }
+
+    /* Three Things Tracker */
+    .insights-tracker {
+      background: rgba(56, 189, 248, 0.05);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      margin: 2rem 0;
+    }
+    .insight-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.875rem;
+      opacity: 0.5;
+      transition: opacity 0.3s;
+    }
+    .insight-item.unlocked { opacity: 1; }
+    .insight-badge {
+      background: var(--surface-border);
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.25rem;
+      font-weight: 700;
+    }
+    .insight-item.unlocked .insight-badge { background: var(--primary-accent); color: white; }
+
+    /* Typography & Content */
+    p { margin-bottom: 1.25rem; color: #cbd5e1; }
+    h2 { font-size: 1.5rem; margin: 2rem 0 1rem 0; color: white; letter-spacing: -0.01em; }
+    h3 { font-size: 1.15rem; margin: 1.5rem 0 0.75rem 0; color: white; }
+    ul, ol { margin-bottom: 1.25rem; padding-left: 1.25rem; color: #cbd5e1; }
+    li { margin-bottom: 0.5rem; }
+    
+    .pull-quote {
+      border-left: 4px solid var(--primary);
+      padding: 1rem 1.25rem;
+      background: var(--surface);
+      margin: 1.5rem 0;
+      border-radius: 0 0.5rem 0.5rem 0;
+      font-style: italic;
+    }
+    .share-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .share-btn {
+      font-size: 0.75rem;
+      color: var(--primary);
+      background: transparent;
+      border: 1px solid var(--surface-border);
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .share-btn:hover { background: var(--surface-border); }
+
+    /* SVG Architecture Diagram */
+    .arch-diagram {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      margin: 2rem 0;
+    }
+
+    /* Scroll Reveals */
+    .scroll-reveal {
+      opacity: 0.2;
+      transform: translateY(20px);
+      transition: all 0.6s ease;
+    }
+    .scroll-reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    footer {
+      border-top: 1px solid var(--surface-border);
+      padding: 3rem 1.5rem;
+      margin-top: 4rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .scroll-reveal, .sim-bar-fill, #progress { transition: none !important; }
+    }
+
+    @media (max-width: 880px) {
+      .layout-grid { grid-template-columns: 1fr; }
+      #rail { display: none; }
+      .pattern-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="progress"></div>
+
+  <header id="topbar">
+    <div class="nav-left">
+      <a href="https://iggym.github.io/production-ai-patterns/">← Production AI Patterns</a>
+      <span class="breadcrumb">/ Architecture / CFGD</span>
+    </div>
+    <span class="read-time">6 min read</span>
+  </header>
+
+  <div class="layout-grid">
+    <aside id="rail">
+      <div class="toc-title">Pattern Anatomy</div>
+      <ul class="toc-list">
+        <li><a href="#trap">The Engine Trap</a></li>
+        <li><a href="#delusion">The Monolith Delusion</a></li>
+        <li><a href="#pattern-card">Pattern Specification</a></li>
+        <li><a href="#forces-widget">Forces Simulator</a></li>
+        <li><a href="#architecture">Architecture Diagram</a></li>
+        <li><a href="#playbook">Implementation Playbook</a></li>
+      </ul>
+    </aside>
+
+    <main>
+      <h1 class="hero-title">Context-Filtered Gateway Decomposition</h1>
+      
+      <div class="meta-bar">
+        <span>Published: March 27, 2026</span>
+        <span>Target Audience: Platform & ML Engineers</span>
+      </div>
+
+      <!-- Three Things Tracker -->
+      <div class="insights-tracker">
+        <div style="font-size: 0.75rem; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 0.75rem;">
+          Key Perspective Shifts To Unlock
+        </div>
+        <div class="insight-item" id="insight-1">
+          <span class="insight-badge">INSIGHT 1</span>
+          <span>Compounding state in monolithic agent loops inflates token costs quadratically.</span>
+        </div>
+        <div class="insight-item" id="insight-2">
+          <span class="insight-badge">INSIGHT 2</span>
+          <span>Single-responsibility micro-agents bounded by clean schemas lower context size by 82%.</span>
+        </div>
+        <div class="insight-item" id="insight-3">
+          <span class="insight-badge">INSIGHT 3</span>
+          <span>Context-Filtered Gateways act as semantic circuit breakers preventing failure cascades.</span>
+        </div>
+      </div>
+
+      <section id="trap">
+        <h2>The Hidden Engine Trap</h2>
+        <p>A high-throughput legal contract processing system began crashing under its own weight during an enterprise deployment. The architecture was textbook state-of-the-art: a single, high-capacity agent loop powered by an expansive 200k-token model context window. The agent was handed a 40-page contract, given access to specialized search tools, and instructed to run a multi-step audit for compliance violations.</p>
+        <p>By step fourteen of the execution trajectory, processing latency had jumped from 2.4 seconds per turn to over 18 seconds. Input costs soared exponentially. More critically, the system began failing audit checks that it routinely passed on step two. The agent was not running out of memory space; it was drowning in its own operational transcript. Every tool call, raw database dump, and intermediate scratchpad thought remained stuck in the active context, distracting the model's core attention mechanism and triggering catastrophic accuracy decay.</p>
+      </section>
+
+      <section id="delusion" class="scroll-reveal">
+        <h2>The Monolith Delusion</h2>
+        <p>The instinct of most engineering teams building complex AI agents is to rely on massive context windows as an all-in-one operational state machine. The reasoning seems sound: if a model can process two million tokens, keeping the entire execution history in the prompt ensures the system never forgets a detail.</p>
+        
+        <div class="pull-quote">
+          "Long context windows act as high-latency memory leaks."
+          <div class="share-actions">
+            <a href="https://twitter.com/intent/tweet?text=Long%20context%20windows%20act%20as%20high-latency%20memory%20leaks." target="_blank" class="share-btn">Share to X</a>
+            <a href="https://www.linkedin.com/sharing/share-offsite/?url=https://iggym.github.io/production-ai-patterns/" target="_blank" class="share-btn">Share to LinkedIn</a>
+          </div>
+        </div>
+
+        <p>This mental model is fundamentally flawed. Treat long context windows as unbounded RAM, and your system succumbs to quadratic token inflation and semantic noise pollution. Every additional step in a monolithic agent loop forces the foundation model to re-encode all prior execution steps, driving cost up quadratically while degrading precision.</p>
+      </section>
+
+      <!-- Pattern Card -->
+      <section id="pattern-card">
+        <div class="pattern-card">
+          <h3>
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+            Pattern Specification: Context-Filtered Gateway Decomposition
+          </h3>
+          <div class="pattern-grid">
+            <div class="pattern-item">
+              <strong>Problem</strong>
+              Monolithic LLM agent loops experience exponential cost growth and attention distraction over multi-step workflows.
+            </div>
+            <div class="pattern-item">
+              <strong>Forces</strong>
+              Need for multi-step continuity vs. cost of token re-processing; full visibility vs. semantic noise.
+            </div>
+            <div class="pattern-item">
+              <strong>Solution</strong>
+              Decompose agents into stateless micro-workers; interpose an AI Gateway that validates and strips raw trajectory history.
+            </div>
+            <div class="pattern-item">
+              <strong>Consequences</strong>
+              Requires schema design and orchestrator overhead; yields 78% lower token overhead and eliminates context pollution.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bespoke Centerpiece Widget -->
+      <section id="forces-widget">
+        <div class="widget-container">
+          <div class="widget-title">
+            <span>Forces Simulator: Monolith vs. Gateway Decomposition</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Toggle architectural constraints</span>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">Enable Gateway Context Filtering to observe how trajectory pruning protects token budget and accuracy over multi-step execution.</p>
+          
+          <div class="forces-controls">
+            <button class="toggle-btn active" id="btn-monolith" onclick="setArchitecture('monolith')">Monolithic Loop</button>
+            <button class="toggle-btn" id="btn-gateway" onclick="setArchitecture('gateway')">Gateway Filtered</button>
+          </div>
+
+          <div class="simulation-output">
+            <div class="sim-metric">
+              <span>Step Count: <strong id="sim-step">15 Turns</strong></span>
+              <span>Input Tokens / Step: <strong id="sim-tokens">142,000</strong></span>
+            </div>
+            <div class="sim-metric">
+              <span>System Accuracy</span>
+              <span id="sim-acc-text">42% (Degraded)</span>
+            </div>
+            <div class="sim-bar-bg" style="margin-bottom: 1rem;">
+              <div class="sim-bar-fill" id="sim-acc-bar" style="width: 42%; background: var(--danger);"></div>
+            </div>
+
+            <div class="sim-metric">
+              <span>Relative Cost / Workflow</span>
+              <span id="sim-cost-text">$4.85</span>
+            </div>
+            <div class="sim-bar-bg">
+              <div class="sim-bar-fill" id="sim-cost-bar" style="width: 85%; background: var(--warning);"></div>
+            </div>
+          </div>
+          <figcaption style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.75rem; text-align: center;">
+            Quadratic ballooning vs. linear containment: how architectural boundaries prevent financial engine fires.
+          </figcaption>
+        </div>
+      </section>
+
+      <!-- Architecture Diagram -->
+      <section id="architecture">
+        <h2>The Decomposition Architecture</h2>
+        <p>The Context-Filtered Gateway Decomposition pattern resolves these forces by decoupling task execution from state retention.</p>
+
+        <div class="arch-diagram">
+          <svg viewBox="0 0 600 260" width="100%" height="100%" style="overflow: visible;">
+            <!-- Orchestrator Box -->
+            <rect x="20" y="100" width="120" height="60" rx="6" fill="#111827" stroke="#0284c7" stroke-width="2"/>
+            <text x="80" y="128" fill="#e2e8f0" font-size="11" text-anchor="middle" font-family="sans-serif" font-weight="bold">FastAPI / Redis</text>
+            <text x="80" y="143" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="sans-serif">State Orchestrator</text>
+
+            <!-- Arrow 1 -->
+            <path d="M 140 130 L 190 130" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)"/>
+
+            <!-- Gateway Box -->
+            <rect x="200" y="80" width="140" height="100" rx="6" fill="#111827" stroke="#f59e0b" stroke-width="2"/>
+            <text x="270" y="115" fill="#e2e8f0" font-size="11" text-anchor="middle" font-family="sans-serif" font-weight="bold">LiteLLM Gateway</text>
+            <text x="270" y="132" fill="#f59e0b" font-size="9" text-anchor="middle" font-family="sans-serif">Context Filter</text>
+            <text x="270" y="147" fill="#94a3b8" font-size="8" text-anchor="middle" font-family="sans-serif">Strips Trajectory Logs</text>
+
+            <!-- Arrows Out -->
+            <path d="M 340 110 L 410 60" stroke="#38bdf8" stroke-width="2"/>
+            <path d="M 340 150 L 410 200" stroke="#38bdf8" stroke-width="2"/>
+
+            <!-- Worker A -->
+            <rect x="420" y="30" width="140" height="60" rx="6" fill="#111827" stroke="#10b981" stroke-width="2"/>
+            <text x="490" y="58" fill="#e2e8f0" font-size="11" text-anchor="middle" font-family="sans-serif" font-weight="bold">Worker Node A</text>
+            <text x="490" y="73" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="sans-serif">Minimal Scope</text>
+
+            <!-- Worker B -->
+            <rect x="420" y="170" width="140" height="60" rx="6" fill="#111827" stroke="#10b981" stroke-width="2"/>
+            <text x="490" y="198" fill="#e2e8f0" font-size="11" text-anchor="middle" font-family="sans-serif" font-weight="bold">Worker Node B</text>
+            <text x="490" y="213" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="sans-serif">Validated Schema</text>
+
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8"/>
+              </marker>
+            </defs>
+          </svg>
+          <figcaption style="font-size: 0.75rem; color: var(--text-muted); text-anchor: middle; text-align: center; margin-top: 0.5rem;">
+            Clean structural boundaries: information passes through strict semantic airlocks rather than overflowing pooled context.
+          </figcaption>
+        </div>
+      </section>
+
+      <section id="playbook" class="scroll-reveal">
+        <h2>Your Implementation Playbook</h2>
+        <p>Before deploying your next multi-step agent workflow, audit your architecture against this checklist:</p>
+        
+        <ul>
+          <li><strong>Externalize State:</strong> Store intermediate operational state in Redis or Postgres rather than accumulating LLM prompt trajectories.</li>
+          <li><strong>Set Gateway Boundaries:</strong> Use an AI Gateway (e.g., LiteLLM, Kong) to enforce input validation and token budget caps between execution steps.</li>
+          <li><strong>Enforce Schema Contracts:</strong> Ensure every micro-agent worker consumes and returns strictly structured JSON payloads rather than free-form text.</li>
+          <li><strong>Prune Context Trajectories:</strong> Strip raw tool call logs, error traces, and intermediate search results prior to initiating downstream agent calls.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    <p>Production AI Patterns · <a href="https://iggym.github.io/production-ai-patterns/" style="color: var(--primary);">Return to Pattern Index</a></p>
+  </footer>
+
+  <script>
+    // Progress Bar
+    window.addEventListener('scroll', () => {
+      const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+      const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const scrolled = (winScroll / height) * 100;
+      document.getElementById('progress').style.width = scrolled + '%';
+
+      // Unlock insights based on scroll
+      if (scrolled > 15) document.getElementById('insight-1').classList.add('unlocked');
+      if (scrolled > 40) document.getElementById('insight-2').classList.add('unlocked');
+      if (scrolled > 70) document.getElementById('insight-3').classList.add('unlocked');
+    });
+
+    // Forces Simulator Logic
+    function setArchitecture(type) {
+      const btnMono = document.getElementById('btn-monolith');
+      const btnGate = document.getElementById('btn-gateway');
+      const stepText = document.getElementById('sim-tokens');
+      const accText = document.getElementById('sim-acc-text');
+      const accBar = document.getElementById('sim-acc-bar');
+      const costText = document.getElementById('sim-cost-text');
+      const costBar = document.getElementById('sim-cost-bar');
+
+      if (type === 'monolith') {
+        btnMono.classList.add('active');
+        btnGate.classList.remove('active');
+        stepText.innerText = '142,000';
+        accText.innerText = '42% (Degraded)';
+        accBar.style.width = '42%';
+        accBar.style.background = 'var(--danger)';
+        costText.innerText = '$4.85';
+        costBar.style.width = '85%';
+        costBar.style.background = 'var(--warning)';
+      } else {
+        btnGate.classList.add('active');
+        btnMono.classList.remove('active');
+        stepText.innerText = '12,500';
+        accText.innerText = '96% (Optimal)';
+        accBar.style.width = '96%';
+        accBar.style.background = 'var(--success)';
+        costText.innerText = '$0.62';
+        costBar.style.width = '15%';
+        costBar.style.background = 'var(--success)';
+      }
+    }
+
+    // Scroll Reveal Observer
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>
