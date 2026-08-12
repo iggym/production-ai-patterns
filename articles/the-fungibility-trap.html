@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Fungibility Trap | Production AI Patterns</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f1115;
+      --surface: #181b21;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --success: #10b981;
+      --glass: rgba(24, 27, 33, 0.7);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Progress Bar */
+    #progress {
+      position: fixed; top: 0; left: 0; height: 3px;
+      background: var(--accent); width: 0%; z-index: 1000;
+      transition: width 0.1s linear;
+    }
+
+    /* Topbar */
+    #topbar {
+      position: sticky; top: 0; z-index: 900;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding: 1rem 2rem;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .breadcrumb { font-size: 0.8rem; color: var(--muted); }
+    .breadcrumb a { color: var(--accent); text-decoration: none; }
+    .meta { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--muted); }
+    
+    .hamburger { display: none; background: none; border: none; color: var(--text); font-size: 1.5rem; cursor: pointer; }
+
+    /* Layout */
+    .layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      max-width: 1400px;
+      margin: 0 auto;
+      gap: 4rem;
+      padding: 2rem;
+    }
+
+    #rail {
+      position: sticky; top: 100px;
+      height: fit-content;
+      font-size: 0.85rem;
+    }
+    .rail-section { margin-bottom: 2rem; }
+    .rail-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 0.5rem; }
+    .rail-link { display: block; color: var(--text); text-decoration: none; padding: 0.25rem 0; transition: color 0.2s; }
+    .rail-link:hover { color: var(--accent); }
+
+    main { max-width: 720px; }
+
+    /* Typography */
+    h1, h2, h3 { font-weight: 800; line-height: 1.2; margin-bottom: 1rem; }
+    h1 { font-size: 2.5rem; margin-top: 2rem; }
+    h2 { font-size: 1.8rem; margin-top: 3rem; border-left: 4px solid var(--accent); padding-left: 1rem; }
+    p { margin-bottom: 1.5rem; font-size: 1.05rem; }
+    
+    .hero-clamp {
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+
+    /* Pattern Card */
+    .pattern-card {
+      background: var(--surface); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; padding: 1.5rem; margin: 2rem 0;
+      border-left: 4px solid var(--warn);
+    }
+    .pattern-card h4 { color: var(--warn); margin-bottom: 0.5rem; }
+    .pattern-card ul { padding-left: 1.2rem; margin-bottom: 1rem; }
+
+    /* Spectrum Widget */
+    .spectrum {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 2rem 0;
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; overflow: hidden;
+    }
+    .spectrum-side { padding: 1.5rem; }
+    .spectrum-before { background: rgba(239, 68, 68, 0.1); border-right: 1px solid rgba(255,255,255,0.1); }
+    .spectrum-after { background: rgba(16, 185, 129, 0.1); }
+    .spectrum-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 0.5rem; }
+
+    /* Pull Quotes */
+    .pull-quote {
+      font-size: 1.5rem; font-weight: 600; color: var(--accent);
+      border-left: 4px solid var(--accent); padding-left: 1.5rem;
+      margin: 3rem 0; position: relative;
+    }
+    .share-icons { display: flex; gap: 0.5rem; margin-top: 1rem; }
+    .share-icons a { color: var(--muted); transition: color 0.2s; }
+    .share-icons a:hover { color: var(--text); }
+
+    /* Centerpiece Widget */
+    #centerpiece {
+      background: var(--surface); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; padding: 2rem; margin: 3rem 0;
+    }
+    .forces-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
+    .force-btn {
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      padding: 1rem; border-radius: 8px; cursor: pointer; text-align: center;
+      transition: all 0.2s;
+    }
+    .force-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+    .shield-btn {
+      width: 100%; padding: 1rem; background: var(--success); color: var(--bg);
+      border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+      margin-bottom: 1.5rem;
+    }
+    .shield-btn.inactive { background: var(--muted); }
+    
+    .widget-visual {
+      height: 150px; background: rgba(0,0,0,0.2); border-radius: 8px;
+      display: flex; align-items: flex-end; padding: 1rem; gap: 0.5rem;
+      position: relative; overflow: hidden;
+    }
+    .cost-bar {
+      width: 20%; background: var(--success); transition: height 0.5s ease, background 0.5s ease;
+    }
+    .system-health {
+      position: absolute; top: 1rem; right: 1rem; font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem; padding: 0.25rem 0.5rem; border-radius: 4px;
+    }
+    .health-good { background: var(--success); color: var(--bg); }
+    .health-bad { background: var(--danger); color: white; }
+
+    /* Figures */
+    figure { margin: 2rem 0; text-align: center; }
+    figcaption { font-size: 0.8rem; color: var(--muted); font-style: italic; margin-top: 0.5rem; }
+    
+    /* Chart & Table */
+    #chart-container { height: 200px; display: flex; align-items: flex-end; justify-content: space-around; border-bottom: 1px solid var(--muted); margin-bottom: 2rem; }
+    .chart-bar { width: 40px; background: var(--accent); transition: height 1s ease-out; }
+    .chart-label { font-size: 0.7rem; color: var(--muted); margin-top: 0.5rem; text-align: center; }
+    
+    table { width: 100%; border-collapse: collapse; margin: 2rem 0; font-size: 0.9rem; }
+    th, td { padding: 1rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    th { color: var(--accent); }
+    tr:hover { background: rgba(255,255,255,0.05); }
+
+    /* Three Things Tracker */
+    #three-things {
+      position: fixed; right: 2rem; bottom: 2rem;
+      background: var(--surface); border: 1px solid rgba(255,255,255,0.1);
+      padding: 1rem; border-radius: 8px; width: 200px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      z-index: 800;
+    }
+    .insight-item { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.8rem; }
+    .lock-icon { color: var(--muted); }
+    .insight-item.unlocked .lock-icon { color: var(--success); }
+    .insight-text { color: var(--muted); }
+    .insight-item.unlocked .insight-text { color: var(--text); }
+
+    /* Architecture SVG */
+    .arch-diagram { width: 100%; height: auto; }
+    .arch-node { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+    .arch-text { fill: var(--text); font-size: 14px; font-family: 'Inter', sans-serif; }
+
+    /* Recall Cards */
+    .recall-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 2rem 0; }
+    .recall-card {
+      background: var(--surface); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; padding: 1.5rem; cursor: pointer; perspective: 1000px;
+    }
+    .card-inner { position: relative; width: 100%; height: 150px; transition: transform 0.6s; transform-style: preserve-3d; }
+    .recall-card.flipped .card-inner { transform: rotateY(180deg); }
+    .card-front, .card-back {
+      position: absolute; width: 100%; height: 100%; backface-visibility: hidden;
+      display: flex; align-items: center; justify-content: center; padding: 1rem; text-align: center;
+    }
+    .card-back { transform: rotateY(180deg); background: var(--accent); color: var(--bg); font-weight: 600; border-radius: 8px; }
+
+    /* Concept Map */
+    #concept-map { margin: 3rem 0; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid rgba(255,255,255,0.1); margin-top: 4rem;
+      padding: 2rem; text-align: center; color: var(--muted); font-size: 0.8rem;
+    }
+    .scroll-top { color: var(--accent); cursor: pointer; margin-top: 1rem; display: inline-block; }
+
+    /* Responsive */
+    @media (max-width: 880px) {
+      .layout { grid-template-columns: 1fr; }
+      #rail { display: none; position: fixed; top: 60px; left: 0; width: 100%; height: calc(100vh - 60px); background: var(--bg); padding: 2rem; z-index: 850; }
+      #rail.open { display: block; }
+      .hamburger { display: block; }
+      #three-things { width: 150px; right: 1rem; bottom: 1rem; }
+    }
+
+    /* Reduced Motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+      .reveal { opacity: 1 !important; transform: none !important; }
+    }
+
+    /* Reveal Animations */
+    .reveal { opacity: 0; transform: translateY(20px); transition: all 0.8s ease; }
+    .reveal.revealed { opacity: 1; transform: translateY(0); }
+    
+    /* Beat Specific Animations */
+    #beat1-section .chart-bar { height: 10px; }
+    #beat1-section.revealed .chart-bar:nth-child(1) { height: 20px; }
+    #beat1-section.revealed .chart-bar:nth-child(2) { height: 150px; background: var(--danger); }
+    
+    #beat2-section .loop-path { stroke-dasharray: 1000; stroke-dashoffset: 1000; }
+    #beat2-section.revealed .loop-path { animation: drawLoop 2s forwards; }
+    #beat2-section .guillotine { opacity: 0; }
+    #beat2-section.revealed .guillotine { animation: dropGuillotine 1s 2s forwards; }
+
+    @keyframes drawLoop { to { stroke-dashoffset: 0; } }
+    @keyframes dropGuillotine { to { opacity: 1; transform: translateY(50px); } }
+
+  </style>
+</head>
+<body>
+
+  <div id="progress"></div>
+
+  <header id="topbar">
+    <div class="breadcrumb">
+      <a href="https://iggym.github.io/production-ai-patterns/">Home</a> / Cost-Governance / The Fungibility Trap
+    </div>
+    <div class="meta">6 min read · W11, 2026</div>
+    <button class="hamburger" id="hamburger">☰</button>
+  </header>
+
+  <div class="layout">
+    <aside id="rail">
+      <div class="rail-section">
+        <div class="rail-title">Pattern</div>
+        <a href="#pattern" class="rail-link">Semantic Firewalls</a>
+        <a href="#centerpiece" class="rail-link">Forces Diagram</a>
+      </div>
+      <div class="rail-section">
+        <div class="rail-title">Architecture</div>
+        <a href="#architecture" class="rail-link">Layered Defense</a>
+        <a href="#concept-map" class="rail-link">Concept Map</a>
+      </div>
+      <div class="rail-section">
+        <div class="rail-title">Recall</div>
+        <a href="#recall" class="rail-link">Decision Cards</a>
+      </div>
+    </aside>
+
+    <main>
+      <article>
+        <h1 class="hero-clamp">The Fungibility Trap</h1>
+        <p>Saturday, 2:00 AM. Your phone buzzes. PagerDuty flags a critical alert: the primary LLM provider is returning HTTP 429s across the entire cluster. Dashboard metrics show flat traffic and normal request volume, yet the global Tokens Per Minute (TPM) quota is entirely exhausted. Tracing the offending traffic reveals a single enterprise customer running an experimental summarization agent. The agent choked on a malformed PDF. Instead of failing gracefully, it entered a recursive evaluation loop, demanding the model "try a different extraction strategy." One request per second. Your Request Per Minute (RPM) circuit breakers never tripped. Each request, however, carried a compounding context window. Sunrise brought a zero balance on the monthly API budget.</p>
+
+        <div class="spectrum">
+          <div class="spectrum-side spectrum-before">
+            <div class="spectrum-label">Before Belief</div>
+            <p>Requests are fungible. Rate limiting is a network concern.</p>
+          </div>
+          <div class="spectrum-side spectrum-after">
+            <div class="spectrum-label">After Belief</div>
+            <p>Requests are non-fungible. Cost governance belongs to the semantic layer.</p>
+          </div>
+        </div>
+
+        <h2 id="beat1-section" class="reveal">Counting The Rain</h2>
+        <p>You are counting the wrong beans. Standard infrastructure assumes requests are fungible—one HTTP POST roughly equals another in compute and cost. Probabilistic AI systems shatter this assumption. A simple classification call costs fractions of a cent. An agentic loop carrying a 100k-token context window costs dollars. If your circuit breakers only measure HTTP verbs, you are trying to stop a flood by counting raindrops.</p>
+        
+        <figure>
+          <div id="chart-container">
+            <div class="chart-group"><div class="chart-bar"></div><div class="chart-label">RPM</div></div>
+            <div class="chart-group"><div class="chart-bar"></div><div class="chart-label">Token Cost</div></div>
+          </div>
+          <figcaption>Counting the envelopes while the vault burns.</figcaption>
+        </figure>
+
+        <div class="pull-quote reveal">
+          "If your circuit breakers only measure HTTP verbs, you are trying to stop a flood by counting raindrops."
+          <div class="share-icons">
+            <a href="https://twitter.com/intent/tweet?text=If your circuit breakers only measure HTTP verbs, you are trying to stop a flood by counting raindrops.&url=" target="_blank">𝕏</a>
+            <a href="https://www.linkedin.com/sharing/share-offsite/?url=" target="_blank">in</a>
+          </div>
+        </div>
+
+        <div id="pattern" class="pattern-card reveal">
+          <h4>Pattern: Semantic Cost Firewalls</h4>
+          <p><strong>Problem:</strong> AI workloads exhibit extreme variance in resource consumption.</p>
+          <p><strong>Forces:</strong> Token billing, recursive loops, RPM blindness, noisy neighbors.</p>
+          <p><strong>Solution:</strong> Token-aware circuit breakers and workflow ceilings.</p>
+          <p><strong>Consequences:</strong> Absolute blast-radius containment.</p>
+        </div>
+
+        <p>Cost governance in AI is functionally identical to garbage collection in memory management—both require aggressive, automated reclamation before the system panics and crashes.</p>
+
+        <h2 id="beat2-section" class="reveal">Starving The Queue</h2>
+        <p>When Kong released advanced token-based rate limiting, they acknowledged that traditional request limits fail for LLM traffic. The gateway must intercept the stream, count the completion tokens, and enforce a hard stop. Similarly, background queueing platforms discovered that API-level throttling is insufficient; you must enforce per-tenant concurrency limits in the job queue itself.</p>
+
+        <figure>
+          <svg width="100%" height="150" viewBox="0 0 400 150">
+            <path class="loop-path" d="M 50 75 C 50 20, 350 20, 350 75 C 350 130, 50 130, 50 75" fill="none" stroke="#38bdf8" stroke-width="4" />
+            <line class="guillotine" x1="200" y1="0" x2="200" y2="150" stroke="#ef4444" stroke-width="4" />
+          </svg>
+          <figcaption>The guillotine drops before the loop closes.</figcaption>
+        </figure>
+
+        <div class="pull-quote reveal">
+          "Cost governance in AI is functionally identical to garbage collection in memory management."
+          <div class="share-icons">
+            <a href="https://twitter.com/intent/tweet?text=Cost governance in AI is functionally identical to garbage collection in memory management.&url=" target="_blank">𝕏</a>
+            <a href="https://www.linkedin.com/sharing/share-offsite/?url=" target="_blank">in</a>
+          </div>
+        </div>
+
+        <h2>Budgets Over Brakes</h2>
+        <p>To build a Semantic Cost Firewall, implement Gateway Token Buckets, Workflow Hard Caps, and Queue Concurrency Fences.</p>
+
+        <div id="centerpiece" class="reveal">
+          <h3 style="margin-bottom: 1rem; font-size: 1.2rem;">Interactive Forces Diagram</h3>
+          <div class="forces-grid">
+            <button class="force-btn" data-force="variance">Token Variance</button>
+            <button class="force-btn" data-force="noise">Tenant Noise</button>
+            <button class="force-btn" data-force="loops">Agent Loops</button>
+          </div>
+          <button class="shield-btn inactive" id="shield-btn">Activate Semantic Firewall</button>
+          <div class="widget-visual">
+            <div class="system-health health-good">Stable</div>
+            <div class="cost-bar"></div>
+            <div class="cost-bar"></div>
+            <div class="cost-bar"></div>
+            <div class="cost-bar"></div>
+          </div>
+          <figcaption style="margin-top: 1rem;">Turning the dials on a runaway engine.</figcaption>
+        </div>
+
+        <figure id="architecture">
+          <svg class="arch-diagram" viewBox="0 0 600 200">
+            <rect class="arch-node" x="50" y="50" width="120" height="100" rx="8" />
+            <text class="arch-text" x="110" y="100" text-anchor="middle">Edge Gateway</text>
+            
+            <rect class="arch-node" x="240" y="50" width="120" height="100" rx="8" />
+            <text class="arch-text" x="300" y="100" text-anchor="middle">Job Queue</text>
+            
+            <rect class="arch-node" x="430" y="50" width="120" height="100" rx="8" />
+            <text class="arch-text" x="490" y="100" text-anchor="middle">LLM Provider</text>
+            
+            <line x1="170" y1="100" x2="240" y2="100" stroke="#38bdf8" stroke-width="2" />
+            <line x1="360" y1="100" x2="430" y2="100" stroke="#38bdf8" stroke-width="2" />
+          </svg>
+          <figcaption>The gateway catches the rain; the queue builds the dam.</figcaption>
+        </figure>
+
+        <div id="recall" class="recall-grid">
+          <div class="recall-card">
+            <div class="card-inner">
+              <div class="card-front">An agent enters a recursive loop. Which layer prevents budget drain?</div>
+              <div class="card-back">Workflow Ceiling at the Gateway</div>
+            </div>
+          </div>
+          <div class="recall-card">
+            <div class="card-inner">
+              <div class="card-front">Batch jobs starve interactive chat. Which layer fixes this?</div>
+              <div class="card-back">Queue Concurrency Fences</div>
+            </div>
+          </div>
+        </div>
+
+        <figure id="concept-map">
+          <svg viewBox="0 0 400 200">
+            <circle cx="200" cy="100" r="40" fill="var(--accent)" />
+            <text x="200" y="105" text-anchor="middle" fill="var(--bg)" font-weight="bold">Firewalls</text>
+            
+            <circle cx="80" cy="100" r="30" fill="var(--surface)" stroke="var(--muted)" />
+            <text x="80" y="105" text-anchor="middle" fill="var(--text)" font-size="12">Context</text>
+            
+            <circle cx="320" cy="100" r="30" fill="var(--surface)" stroke="var(--muted)" />
+            <text x="320" y="105" text-anchor="middle" fill="var(--text)" font-size="12">Routing</text>
+            
+            <line x1="120" y1="100" x2="160" y2="100" stroke="var(--muted)" />
+            <line x1="240" y1="100" x2="280" y2="100" stroke="var(--muted)" />
+          </svg>
+          <figcaption>Semantic cost governance anchors the isolation mesh.</figcaption>
+        </figure>
+
+        <p>Open your gateway configuration today. Find the rate-limiting rules for your most expensive model. If the limit is defined in Requests Per Minute, change it to Tokens Per Workflow before you go to sleep.</p>
+      </article>
+    </main>
+  </div>
+
+  <div id="three-things">
+    <div class="rail-title" style="margin-bottom: 1rem;">Insights Unlocked</div>
+    <div class="insight-item" id="insight-1">
+      <span class="lock-icon">🔒</span>
+      <span class="insight-text">RPM Variance</span>
+    </div>
+    <div class="insight-item" id="insight-2">
+      <span class="lock-icon">🔒</span>
+      <span class="insight-text">Queue Isolation</span>
+    </div>
+    <div class="insight-item" id="insight-3">
+      <span class="lock-icon">🔒</span>
+      <span class="insight-text">Workflow Ceilings</span>
+    </div>
+  </div>
+
+  <footer>
+    <p>Production AI Patterns · Researched 2026-01-29 to 2026-03-12</p>
+    <p>Citations: Kong AI Gateway, Inngest Engineering.</p>
+    <div class="scroll-top" id="scroll-top">↑ Return to Top</div>
+  </footer>
+
+  <script>
+    // Progress Bar
+    window.addEventListener('scroll', () => {
+      const scrollTop = document.documentElement.scrollTop;
+      const scrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const scrolled = (scrollTop / scrollHeight) * 100;
+      document.getElementById('progress').style.width = scrolled + '%';
+    });
+
+    // Mobile Nav
+    document.getElementById('hamburger').addEventListener('click', () => {
+      document.getElementById('rail').classList.toggle('open');
+    });
+
+    // Intersection Observer for Reveals
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+        }
+      });
+    }, { threshold: 0.2 });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // Three Things Tracker
+    const insightObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const id = entry.target.dataset.insight;
+          const el = document.getElementById(`insight-${id}`);
+          if(el) {
+             el.classList.add('unlocked');
+             el.querySelector('.lock-icon').textContent = '🔓';
+          }
+        }
+      });
+    }, { threshold: 0.8 });
+
+    // Map insights to sections
+    document.querySelector('h1').dataset.insight = '1';
+    document.getElementById('beat1-section').dataset.insight = '1';
+    document.getElementById('beat2-section').dataset.insight = '2';
+    document.getElementById('centerpiece').dataset.insight = '3';
+    
+    document.querySelectorAll('[data-insight]').forEach(el => insightObserver.observe(el));
+
+    // Centerpiece Widget Logic
+    const forces = { variance: false, noise: false, loops: false };
+    let shieldActive = false;
+
+    document.querySelectorAll('.force-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const force = btn.dataset.force;
+        forces[force] = !forces[force];
+        btn.classList.toggle('active');
+        updateWidget();
+      });
+    });
+
+    document.getElementById('shield-btn').addEventListener('click', () => {
+      shieldActive = !shieldActive;
+      const btn = document.getElementById('shield-btn');
+      btn.textContent = shieldActive ? 'Firewall Active' : 'Activate Semantic Firewall';
+      btn.classList.toggle('inactive');
+      updateWidget();
+    });
+
+    function updateWidget() {
+      let stress = 0;
+      if (forces.variance) stress += 30;
+      if (forces.noise) stress += 40;
+      if (forces.loops) stress += 100;
+
+      const health = document.querySelector('.system-health');
+      const bars = document.querySelectorAll('.cost-bar');
+      
+      if (shieldActive && stress > 0) {
+        stress = Math.max(10, stress - 80);
+        health.textContent = "Contained";
+        health.className = "system-health health-good";
+      } else if (stress > 80) {
+        health.textContent = "Catastrophic 429";
+        health.className = "system-health health-bad";
+      } else {
+        health.textContent = "Stable";
+        health.className = "system-health health-good";
+      }
+
+      bars.forEach((bar, i) => {
+        const h = Math.min(100, stress + (i * 10));
+        bar.style.height = h + '%';
+        bar.style.background = stress > 80 ? 'var(--danger)' : 'var(--success)';
+      });
+    }
+
+    // Recall Cards
+    document.querySelectorAll('.recall-card').forEach(card => {
+      card.addEventListener('click', () => card.classList.toggle('flipped'));
+    });
+
+    // Scroll Top
+    document.getElementById('scroll-top').addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  </script>
+</body>
+</html>
