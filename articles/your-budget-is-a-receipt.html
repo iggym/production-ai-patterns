@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Budget Is a Receipt — Production AI Patterns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Variables ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0e0e0e;--bg2:#161614;--card:#1c1b19;--border:#2a2724;
+  --fg:#e8e4df;--muted:#7a756f;--accent:#e5a832;--accent-dim:#b8862a;
+  --danger:#d44030;--warn:#c4882a;--success:#3da55c;
+  --topbar-h:52px;--rail-w:220px;
+  --font-body:'DM Sans',sans-serif;--font-head:'Space Grotesk',sans-serif;
+}
+html{scroll-behavior:smooth;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16px;line-height:1.65}
+a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent-dim)}
+img,svg{display:block;max-width:100%}
+
+/* ── Progress Bar ── */
+#progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);z-index:1100;width:0%;transition:width .08s linear}
+
+/* ── Topbar ── */
+#topbar{position:sticky;top:0;z-index:1050;height:var(--topbar-h);display:flex;align-items:center;padding:0 20px;gap:16px;
+  background:rgba(14,14,14,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.06)}
+#topbar .home-link{font-family:var(--font-head);font-weight:700;font-size:14px;color:var(--fg);white-space:nowrap}
+#topbar .breadcrumb{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#topbar .breadcrumb span{color:var(--muted)}
+#topbar .reading-time{margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap}
+#hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px;margin-left:auto}
+#hamburger svg{width:22px;height:22px;stroke:var(--fg);fill:none;stroke-width:2}
+
+/* ── Mobile Drawer ── */
+#drawer-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1040}
+#drawer{position:fixed;top:0;left:0;bottom:0;width:280px;background:var(--bg2);z-index:1045;transform:translateX(-100%);transition:transform .3s ease;padding:20px;overflow-y:auto;border-right:1px solid var(--border)}
+#drawer.open{transform:translateX(0)}
+#drawer .close-btn{background:none;border:none;cursor:pointer;float:right;padding:4px}
+#drawer .close-btn svg{width:20px;height:20px;stroke:var(--fg);fill:none;stroke-width:2}
+#drawer h3{font-family:var(--font-head);font-size:14px;margin:20px 0 12px;color:var(--accent)}
+#drawer .pattern-card-mobile{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:13px;line-height:1.55}
+#drawer .pattern-card-mobile dt{color:var(--accent);font-weight:700;margin-top:8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+#drawer .pattern-card-mobile dd{color:var(--muted);margin-top:2px}
+
+/* ── Layout ── */
+#layout{display:grid;grid-template-columns:var(--rail-w) 1fr;min-height:calc(100vh - var(--topbar-h))}
+
+/* ── Rail ── */
+#rail{position:sticky;top:var(--topbar-h);height:fit-content;max-height:calc(100vh - var(--topbar-h));overflow-y:auto;padding:24px 16px;border-right:1px solid var(--border);background:var(--bg)}
+.pattern-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:13px;line-height:1.55}
+.pattern-card .pc-title{font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em}
+.pattern-card dt{color:var(--accent);font-weight:700;margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.pattern-card dd{color:var(--muted);margin-top:2px}
+
+/* ── Main ── */
+#main{padding:32px 40px 80px;max-width:780px}
+
+/* ── Hero ── */
+.hero{margin-bottom:40px}
+.hero h1{font-family:var(--font-head);font-size:clamp(2rem,5vw,3rem);font-weight:700;line-height:1.15;color:var(--fg);margin-bottom:8px}
+.hero .subtitle{color:var(--muted);font-size:15px;max-width:520px}
+.hero .date-line{margin-top:12px;font-size:12px;color:var(--muted)}
+
+/* ── Three Things Tracker ── */
+.things-tracker{margin:32px 0 40px;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.things-tracker h3{font-family:var(--font-head);font-size:13px;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px}
+.thing-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);opacity:.35;transition:opacity .5s ease}
+.thing-item:last-child{border-bottom:none}
+.thing-item.unlocked{opacity:1}
+.thing-icon{width:20px;height:20px;flex-shrink:0;margin-top:2px;border-radius:50%;border:2px solid var(--muted);display:flex;align-items:center;justify-content:center;transition:border-color .4s,background .4s}
+.thing-item.unlocked .thing-icon{border-color:var(--success);background:var(--success)}
+.thing-icon svg{width:12px;height:12px;stroke:#fff;fill:none;stroke-width:2.5;opacity:0;transition:opacity .4s}
+.thing-item.unlocked .thing-icon svg{opacity:1}
+.thing-text{font-size:13px;color:var(--muted);transition:color .4s}
+.thing-item.unlocked .thing-text{color:var(--fg)}
+
+/* ── Spectrum Widget ── */
+.spectrum{margin:28px 0 40px;padding:24px;background:var(--card);border:1px solid var(--border);border-radius:10px;position:relative;overflow:hidden}
+.spectrum::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--danger) 0%,var(--warn) 50%,var(--success) 100%)}
+.spectrum-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:14px;display:block}
+.spectrum-row{display:flex;align-items:stretch;gap:16px}
+.spectrum-old{flex:1;padding:16px;background:rgba(212,64,48,.08);border:1px solid rgba(212,64,48,.2);border-radius:8px;position:relative}
+.spectrum-old p{text-decoration:line-through;color:var(--muted);font-size:14px;line-height:1.5}
+.spectrum-new{flex:1;padding:16px;background:rgba(61,165,92,.08);border:1px solid rgba(61,165,92,.2);border-radius:8px}
+.spectrum-new p{color:var(--success);font-size:14px;font-weight:700;line-height:1.5}
+
+/* ── Pull Quotes ── */
+.pull-quote{margin:40px 0;padding:28px 28px 28px 32px;border-left:3px solid var(--accent);background:var(--card);border-radius:0 10px 10px 0;position:relative}
+.pull-quote p{font-family:var(--font-head);font-size:18px;font-weight:700;line-height:1.4;color:var(--fg)}
+.pull-quote .share-row{display:flex;gap:8px;margin-top:14px}
+.pull-quote .share-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--muted);font-size:11px;cursor:pointer;transition:border-color .2s,color .2s}
+.pull-quote .share-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pull-quote .share-btn svg{width:14px;height:14px;fill:currentColor}
+
+/* ── Article Sections ── */
+.article-section{margin-bottom:32px}
+.article-section h2{font-family:var(--font-head);font-size:22px;font-weight:700;margin-bottom:14px;line-height:1.3}
+.article-section p{margin-bottom:14px;color:var(--fg);font-size:15px;line-height:1.7}
+.article-section strong{color:var(--fg);font-weight:700}
+.article-section ol{margin:14px 0 14px 24px;color:var(--fg);font-size:15px;line-height:1.7}
+.article-section ol li{margin-bottom:6px}
+
+/* ── Beat Reveals ── */
+.beat-container{margin:28px 0 36px;min-height:120px}
+.beat-before,.beat-after{padding:20px;border-radius:10px;transition:opacity .6s ease,transform .6s ease}
+.beat-before{background:rgba(212,64,48,.06);border:1px solid rgba(212,64,48,.15);opacity:1;transform:translateY(0)}
+.beat-after{background:rgba(61,165,92,.06);border:1px solid rgba(61,165,92,.15);opacity:0;transform:translateY(12px);position:absolute;top:0;left:0;right:0;pointer-events:none}
+.beat-container.revealed .beat-before{opacity:0;transform:translateY(-12px);pointer-events:none;position:absolute;top:0;left:0;right:0}
+.beat-container.revealed .beat-after{opacity:1;transform:translateY(0);pointer-events:auto;position:relative}
+.beat-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:block;font-weight:700}
+.beat-before .beat-label{color:var(--danger)}
+.beat-after .beat-label{color:var(--success)}
+.beat-text{font-size:14px;line-height:1.6}
+
+/* ── Icon Markers (visual system) ── */
+.marker-forces{display:inline-block;width:14px;height:14px;background:var(--accent);mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1l2.5 4.5L15 6.5l-3.5 3 .8 5L8 12.5 3.7 14.5l.8-5L1 6.5l4.5-1z'/%3E%3C/svg%3E") center/contain no-repeat;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1l2.5 4.5L15 6.5l-3.5 3 .8 5L8 12.5 3.7 14.5l.8-5L1 6.5l4.5-1z'/%3E%3C/svg%3E") center/contain no-repeat;vertical-align:middle;margin-right:6px}
+.marker-cite{display:inline-block;width:12px;height:12px;border:2px solid var(--muted);border-radius:2px;vertical-align:middle;margin-right:5px;position:relative;top:-1px}
+.marker-counter{display:inline-block;width:14px;height:14px;background:var(--danger);mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1v6M8 11v4' stroke='%23fff' stroke-width='2.5' fill='none'/%3E%3C/svg%3E") center/contain no-repeat;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1v6M8 11v4' stroke='%23fff' stroke-width='2.5' fill='none'/%3E%3C/svg%3E") center/contain no-repeat;vertical-align:middle;margin-right:6px}
+
+/* ── Architecture SVG ── */
+.arch-diagram{margin:32px 0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;overflow-x:auto}
+.arch-diagram svg text{font-family:var(--font-body);fill:var(--fg)}
+.arch-diagram .arch-box{fill:var(--bg2);stroke:var(--border);stroke-width:1.5;rx:6;cursor:pointer;transition:stroke .2s}
+.arch-diagram .arch-box:hover{stroke:var(--accent)}
+.arch-diagram .arch-label{font-size:12px;font-weight:700;fill:var(--fg)}
+.arch-diagram .arch-sub{font-size:10px;fill:var(--muted)}
+.arch-diagram .arch-arrow{stroke:var(--muted);stroke-width:1.5;fill:none;marker-end:url(#arrowhead)}
+.arch-diagram .arch-anno{font-size:10px;fill:var(--accent);opacity:0;transition:opacity .3s}
+.arch-diagram .arch-box:hover~.arch-anno,.arch-diagram .anno-visible{opacity:1}
+
+/* ── Forces Diagram (Centerpiece) ── */
+.forces-widget{margin:40px 0;padding:28px;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.forces-widget h3{font-family:var(--font-head);font-size:16px;font-weight:700;margin-bottom:6px}
+.forces-widget .fw-sub{font-size:12px;color:var(--muted);margin-bottom:20px}
+.forces-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
+.force-toggle{display:flex;align-items:center;gap:10px;padding:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;transition:border-color .3s,background .3s;user-select:none}
+.force-toggle.active{border-color:var(--success);background:rgba(61,165,92,.06)}
+.force-toggle.off{border-color:var(--danger);background:rgba(212,64,48,.06)}
+.force-switch{width:36px;height:20px;border-radius:10px;background:var(--border);position:relative;flex-shrink:0;transition:background .3s}
+.force-toggle.active .force-switch{background:var(--success)}
+.force-toggle.off .force-switch{background:var(--danger)}
+.force-switch::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .3s}
+.force-toggle.active .force-switch::after{transform:translateX(16px)}
+.force-toggle.off .force-switch::after{transform:translateX(0)}
+.force-name{font-size:13px;font-weight:700;color:var(--fg)}
+.force-status{font-size:11px;color:var(--muted);margin-top:2px}
+.system-status{padding:20px;border-radius:8px;text-align:center;transition:background .4s,border-color .4s;border:2px solid var(--border);background:var(--bg2)}
+.system-status.governed{border-color:var(--success);background:rgba(61,165,92,.08)}
+.system-status.partial{border-color:var(--warn);background:rgba(196,136,42,.08)}
+.system-status.ungoverned{border-color:var(--danger);background:rgba(212,64,48,.08)}
+.system-status .ss-icon{font-size:28px;margin-bottom:6px}
+.system-status .ss-label{font-family:var(--font-head);font-size:16px;font-weight:700}
+.system-status.governed .ss-label{color:var(--success)}
+.system-status.partial .ss-label{color:var(--warn)}
+.system-status.ungoverned .ss-label{color:var(--danger)}
+.system-status .ss-detail{font-size:12px;color:var(--muted);margin-top:4px}
+
+/* ── Data Chart ── */
+.chart-section{margin:40px 0}
+.chart-section h3{font-family:var(--font-head);font-size:16px;font-weight:700;margin-bottom:16px}
+.chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px}
+#costChart{width:100%;height:260px;display:block}
+.chart-legend{display:flex;gap:20px;margin-top:14px;justify-content:center}
+.chart-legend span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.chart-legend .dot{width:10px;height:10px;border-radius:3px}
+
+/* ── Comparison Table ── */
+.table-section{margin:40px 0}
+.table-section h3{font-family:var(--font-head);font-size:16px;font-weight:700;margin-bottom:16px}
+.comp-table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.comp-table{width:100%;border-collapse:collapse;font-size:13px}
+.comp-table th{text-align:left;padding:12px 16px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+.comp-table th:hover{color:var(--accent)}
+.comp-table th .sort-arrow{margin-left:4px;font-size:10px;opacity:.4}
+.comp-table td{padding:12px 16px;border-bottom:1px solid var(--border);color:var(--fg);transition:background .2s}
+.comp-table tr:hover td{background:rgba(229,168,50,.04)}
+.comp-table tr:last-child td{border-bottom:none}
+.comp-table .col-danger{color:var(--danger)}
+.comp-table .col-warn{color:var(--warn)}
+.comp-table .col-success{color:var(--success)}
+
+/* ── Recall Cards ── */
+.recall-section{margin:48px 0}
+.recall-section h3{font-family:var(--font-head);font-size:16px;font-weight:700;margin-bottom:16px}
+.recall-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.recall-card{perspective:600px;cursor:pointer;height:180px}
+.recall-inner{position:relative;width:100%;height:100%;transition:transform .5s ease;transform-style:preserve-3d}
+.recall-card.flipped .recall-inner{transform:rotateY(180deg)}
+.recall-front,.recall-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;padding:18px;display:flex;flex-direction:column;justify-content:center;border:1px solid var(--border)}
+.recall-front{background:var(--card)}
+.recall-back{background:rgba(61,165,92,.08);border-color:rgba(61,165,92,.2);transform:rotateY(180deg)}
+.recall-front .rq{font-size:13px;font-weight:700;color:var(--fg);line-height:1.5}
+.recall-front .rq-hint{font-size:11px;color:var(--muted);margin-top:10px}
+.recall-back .ra{font-size:13px;color:var(--success);line-height:1.5;font-weight:500}
+
+/* ── Concept Map ── */
+.concept-map{margin:48px 0}
+.concept-map h3{font-family:var(--font-head);font-size:16px;font-weight:700;margin-bottom:16px}
+.concept-map-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;overflow-x:auto}
+.concept-map svg text{font-family:var(--font-body)}
+.cm-node{cursor:pointer}
+.cm-node rect{fill:var(--bg2);stroke:var(--border);stroke-width:1.5;rx:6;transition:stroke .2s}
+.cm-node:hover rect{stroke:var(--accent)}
+.cm-node text{fill:var(--fg);font-size:11px;font-weight:700;text-anchor:middle}
+.cm-node.center rect{fill:rgba(229,168,50,.12);stroke:var(--accent)}
+.cm-node.center text{fill:var(--accent);font-size:12px}
+.cm-link{stroke:var(--muted);stroke-width:1;fill:none;stroke-dasharray:4 3}
+.cm-link.hidden-conn{stroke:var(--accent);stroke-width:1.5;stroke-dasharray:6 3;opacity:.6}
+.cm-link-label{fill:var(--muted);font-size:9px;font-style:italic}
+
+/* ── Figcaptions ── */
+figcaption{font-size:12px;color:var(--muted);margin-top:10px;font-style:italic;line-height:1.5}
+
+/* ── Footer ── */
+#footer{border-top:1px solid var(--border);padding:32px 40px;margin-top:60px}
+#footer .citations{font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:20px}
+#footer .citations strong{color:var(--fg);font-weight:700}
+#footer .footer-links{display:flex;gap:16px;align-items:center}
+#footer .footer-links a{font-size:13px;color:var(--muted)}
+#footer .footer-links a:hover{color:var(--accent)}
+#footer .back-top{margin-left:auto;font-size:13px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:var(--font-body)}
+#footer .back-top:hover{color:var(--accent)}
+
+/* ── Sentinels (invisible scroll markers) ── */
+.sentinel{height:1px;width:1px;pointer-events:none}
+
+/* ── Reduced Motion ── */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:0s!important;transition-duration:0s!important}
+  .beat-before,.beat-after{transition:none}
+  .beat-container.revealed .beat-before{opacity:0;position:absolute}
+  .beat-container.revealed .beat-after{opacity:1;position:relative}
+  .force-switch::after{transition:none}
+}
+
+/* ── Mobile ── */
+@media(max-width:880px){
+  #hamburger{display:block}
+  #rail{display:none}
+  #layout{grid-template-columns:1fr}
+  #main{padding:24px 18px 60px}
+  .forces-grid{grid-template-columns:1fr}
+  .recall-grid{grid-template-columns:1fr}
+  .spectrum-row{flex-direction:column}
+  .comp-table{font-size:12px}
+  .comp-table th,.comp-table td{padding:10px 10px}
+}
+</style>
+</head>
+<body>
+
+<!-- Progress Bar -->
+<div id="progress" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+
+<!-- Topbar -->
+<header id="topbar">
+  <a href="https://iggym.github.io/production-ai-patterns/" class="home-link">Production AI Patterns</a>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <span>Home</span><span aria-hidden="true">/</span><span>Cost Governance</span><span aria-hidden="true">/</span><span style="color:var(--fg)">Your Budget Is a Receipt</span>
+  </nav>
+  <span class="reading-time">5 min read</span>
+  <button id="hamburger" aria-label="Open menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+</header>
+
+<!-- Mobile Drawer -->
+<div id="drawer-overlay"></div>
+<aside id="drawer" aria-label="Sidebar">
+  <button class="close-btn" aria-label="Close menu">
+    <svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+  </button>
+  <h3>Pattern Card</h3>
+  <dl class="pattern-card-mobile">
+    <dt>Problem</dt><dd>LLM workflows burn unbounded spend because cost is invisible at the point of each API call.</dd>
+    <dt>Forces</dt><dd>Cost isn't visible at call time; workflow builder != billing owner; pricing changes silently.</dd>
+    <dt>Solution</dt><dd>Budget-Enforced Proxy: intercept every call, compute estimated cost, block or degrade before the provider is touched.</dd>
+    <dt>Consequences</dt><dd>Per-request enforcement prevents overspend; requires proxy layer and live pricing; degradation ladder trades quality for continuity.</dd>
+  </dl>
+</aside>
+
+<!-- Layout -->
+<div id="layout">
+
+  <!-- Rail (desktop) -->
+  <aside id="rail" aria-label="Pattern reference">
+    <div class="pattern-card">
+      <div class="pc-title">Pattern Card</div>
+      <dt>Problem</dt><dd>LLM workflows burn unbounded spend because cost is invisible at the point of each API call.</dd>
+      <dt>Forces</dt><dd>Cost isn't visible at call time; workflow builder != billing owner; pricing changes silently.</dd>
+      <dt>Solution</dt><dd>Budget-Enforced Proxy: intercept every call, compute estimated cost, block or degrade before the provider is touched.</dd>
+      <dt>Consequences</dt><dd>Per-request enforcement prevents overspend; requires proxy layer and live pricing; degradation ladder trades quality for continuity.</dd>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main id="main">
+
+    <!-- Hero -->
+    <div class="hero">
+      <h1>Your Budget Is a Receipt</h1>
+      <p class="subtitle">Per-workflow cost caps and the budget-enforced proxy pattern for LLM systems.</p>
+      <p class="date-line">March 14, 2025</p>
+    </div>
+
+    <!-- Three Things Tracker -->
+    <div class="things-tracker" aria-label="Key insights unlocked while reading">
+      <h3>Three Things You Didn't Know You Needed</h3>
+      <div class="thing-item" id="thing1">
+        <div class="thing-icon"><svg viewBox="0 0 16 16"><polyline points="3,8 7,12 13,4"/></svg></div>
+        <span class="thing-text">Cost tracking belongs in the proxy layer, not the application layer.</span>
+      </div>
+      <div class="thing-item" id="thing2">
+        <div class="thing-icon"><svg viewBox="0 0 16 16"><polyline points="3,8 7,12 13,4"/></svg></div>
+        <span class="thing-text">Model degradation is governance, not failure.</span>
+      </div>
+      <div class="thing-item" id="thing3">
+        <div class="thing-icon"><svg viewBox="0 0 16 16"><polyline points="3,8 7,12 13,4"/></svg></div>
+        <span class="thing-text">Your pricing data has a half-life of weeks, not months.</span>
+      </div>
+    </div>
+
+    <!-- Spectrum Widget -->
+    <div class="spectrum" aria-label="Common belief vs. reframe">
+      <span class="spectrum-label">Common Belief &rarr; Reframe</span>
+      <div class="spectrum-row">
+        <div class="spectrum-old"><p>"Set a monthly budget and alert when you're close."</p></div>
+        <div class="spectrum-new"><p>"Enforce cost per request, before the token is generated."</p></div>
+      </div>
+    </div>
+
+    <!-- Pull Quote 1 -->
+    <div class="pull-quote">
+      <p>A budget ceiling is a postmortem tool dressed up as a guardrail.</p>
+      <div class="share-row">
+        <button class="share-btn" data-platform="x" data-text="A budget ceiling is a postmortem tool dressed up as a guardrail." aria-label="Share to X">
+          <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          X
+        </button>
+        <button class="share-btn" data-platform="linkedin" data-text="A budget ceiling is a postmortem tool dressed up as a guardrail." aria-label="Share to LinkedIn">
+          <svg viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          LinkedIn
+        </button>
+      </div>
+    </div>
+
+    <!-- Opening Scene -->
+    <section class="article-section">
+      <p>In February 2025, an engineer posted to HackerNews about opening a $14,000 OpenAI invoice for an internal summarization tool — a tool that had been working correctly for three months. No bugs. No runaway loops. No misconfigured retry logic. Just a workflow that called GPT-4o for every Slack thread in a growing company, with no per-request cost enforcement. The tool did exactly what it was built to do, on more threads than ever, because the company had grown. That was the problem. The engineer's post ended with a line that stuck: <strong>"I built the feature right. I just never built the meter."</strong></p>
+    </section>
+
+    <!-- BEAT 1 -->
+    <section class="article-section">
+      <h2>Receipt, Not Brake</h2>
+      <div class="beat-container" data-beat="1">
+        <div class="beat-before">
+          <span class="beat-label">Before</span>
+          <p class="beat-text">Most engineers think cost governance means setting a monthly spend ceiling and wiring up an alert. The budget tells you when you're close to the limit.</p>
+        </div>
+        <div class="beat-after">
+          <span class="beat-label">After</span>
+          <p class="beat-text">A monthly budget tells you what you already spent. It cannot stop a single workflow from burning through your allocation before the alert fires. By the time the alert triggers, the tokens are already generated, the API call is already billed, and the money is already gone.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Budget-Enforced Proxy -->
+    <section class="article-section">
+      <h2>The Budget-Enforced Proxy</h2>
+      <p><span class="marker-cite"></span>The pattern that actually prevents the 3am page is structurally different. It places cost enforcement inside the request path itself — not as a sidecar metric, not as a monthly reconciliation, but as a gate that every LLM call passes through before a single token is generated.</p>
+      <p>LiteLLM, an open-source LLM proxy maintained by BerriAI, implements this through "virtual keys." Each key carries an attached budget. When a workflow makes a call through the proxy, LiteLLM checks the remaining budget on that key before routing the request to OpenAI, Anthropic, or any other provider. If the budget is exhausted, the proxy returns a 429 without touching the provider API. The application gets a clean signal it can handle — retry with a cheaper model, queue the work, or surface an error to the user. The provider never sees the request. The money never leaves the account.</p>
+      <p>The architecture is deliberately simple. Your application code calls a local proxy endpoint instead of calling the LLM provider directly. The proxy holds the budget state, does the math on estimated tokens and current pricing, and either forwards or blocks. No changes to your application logic beyond swapping an endpoint URL and attaching a key.</p>
+    </section>
+
+    <!-- Architecture SVG -->
+    <figure class="arch-diagram">
+      <svg viewBox="0 0 680 140" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7a756f"/></marker></defs>
+        <!-- App -->
+        <g class="arch-node" data-anno="anno1">
+          <rect class="arch-box" x="10" y="35" width="120" height="60" rx="6"/>
+          <text class="arch-label" x="70" y="62" text-anchor="middle">App Code</text>
+          <text class="arch-sub" x="70" y="80" text-anchor="middle">Swaps endpoint, attaches key</text>
+        </g>
+        <text class="arch-anno" id="anno1" x="10" y="115" opacity="0">Your code never talks to the provider directly — it talks here.</text>
+        <!-- Arrow 1 -->
+        <line class="arch-arrow" x1="130" y1="65" x2="185" y2="65"/>
+        <!-- Proxy -->
+        <g class="arch-node" data-anno="anno2">
+          <rect class="arch-box" x="190" y="25" width="140" height="80" rx="6"/>
+          <text class="arch-label" x="260" y="50" text-anchor="middle">LiteLLM Proxy</text>
+          <text class="arch-sub" x="260" y="68" text-anchor="middle">Budget check</text>
+          <text class="arch-sub" x="260" y="84" text-anchor="middle" fill="#d44030" font-weight="700">429 or Forward</text>
+        </g>
+        <text class="arch-anno" id="anno2" x="190" y="125" opacity="0">This is the gate. No budget, no tokens. The provider never sees the request.</text>
+        <!-- Arrow 2 -->
+        <line class="arch-arrow" x1="330" y1="65" x2="385" y2="65"/>
+        <!-- Router -->
+        <g class="arch-node" data-anno="anno3">
+          <rect class="arch-box" x="390" y="35" width="120" height="60" rx="6"/>
+          <text class="arch-label" x="450" y="62" text-anchor="middle">Model Router</text>
+          <text class="arch-sub" x="450" y="80" text-anchor="middle">Cost-aware selection</text>
+        </g>
+        <text class="arch-anno" id="anno3" x="390" y="115" opacity="0">Picks provider based on budget state and degradation ladder.</text>
+        <!-- Arrow 3 -->
+        <line class="arch-arrow" x1="510" y1="65" x2="555" y2="65"/>
+        <!-- Provider -->
+        <g class="arch-node" data-anno="anno4">
+          <rect class="arch-box" x="560" y="35" width="110" height="60" rx="6"/>
+          <text class="arch-label" x="615" y="58" text-anchor="middle">OpenAI / Anthropic</text>
+          <text class="arch-sub" x="615" y="78" text-anchor="middle">Never sees blocked calls</text>
+        </g>
+        <text class="arch-anno" id="anno4" x="530" y="125" opacity="0">Blocked requests never reach billing. The money stays in your account.</text>
+      </svg>
+      <figcaption>Where the Money Stops</figcaption>
+    </figure>
+
+    <!-- What Breaks Without It -->
+    <section class="article-section">
+      <h2>What Breaks Without It</h2>
+      <p><span class="marker-forces"></span>Two forces work against the obvious solutions. First, cost isn't visible at the point of the LLM call unless something in the request path computes it. Application code typically sends a prompt and receives a completion — the cost is a billing-line item that arrives days later, in a different system, owned by a different team. You cannot govern what you cannot see at the point of decision. Second, the person who builds the workflow rarely controls the billing account. The engineer writing the summarization tool and the engineer who gets paged about the invoice are often different people, in different on-call rotations, looking at different dashboards. The governance gap is also an organizational gap.</p>
+    </section>
+
+    <!-- BEAT 2 -->
+    <section class="article-section">
+      <h2>Degradation Is the Point</h2>
+      <div class="beat-container" data-beat="2">
+        <div class="beat-before">
+          <span class="beat-label">Before</span>
+          <p class="beat-text">Most teams treat falling back to a cheaper model as a failure mode — something that happens when the primary model is down or latency spikes.</p>
+        </div>
+        <div class="beat-after">
+          <span class="beat-label">After</span>
+          <p class="beat-text">In cost governance, degradation is the primary mechanism. When the budget tightens, the gateway silently steps down the model chain. The output quality changes. The spend does not exceed the cap. A governed output that's slightly worse is a working system. An ungraded output is the actual failure.</p>
+        </div>
+      </div>
+      <p><span class="marker-cite"></span>Portkey, an AI gateway, implements this as "cost-gated routing": a workflow specifies a chain — GPT-4o first, then Claude 3.5 Sonnet, then GPT-4o-mini — and the gateway checks the remaining budget before each call. When the budget tightens, the gateway silently steps down the chain. The output quality changes. The spend does not exceed the cap.</p>
+      <p><span class="marker-counter"></span>The strongest counterargument to this approach — that degraded output damages user trust — falls apart under inspection: an ungraded output is the actual failure, because it means the system ran out of money and stopped entirely. A governed output that's slightly worse is a working system. The user gets a summary. It's not as good. The system is still running.</p>
+    </section>
+
+    <!-- Pull Quote 2 -->
+    <div class="pull-quote">
+      <p>A governed output that's slightly worse is a working system. An ungraded output is the actual failure.</p>
+      <div class="share-row">
+        <button class="share-btn" data-platform="x" data-text="A governed output that's slightly worse is a working system. An ungraded output is the actual failure." aria-label="Share to X">
+          <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          X
+        </button>
+        <button class="share-btn" data-platform="linkedin" data-text="A governed output that's slightly worse is a working system. An ungraded output is the actual failure." aria-label="Share to LinkedIn">
+          <svg viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          LinkedIn
+        </button>
+      </div>
+    </div>
+
+    <!-- Stale Baseline -->
+    <section class="article-section">
+      <h2>The Stale Baseline Trap</h2>
+      <p><span class="marker-forces"></span>There's a third force that catches teams who do everything else right. LLM pricing changes. Between January and March 2025, OpenAI adjusted GPT-4o-mini pricing, Anthropic changed token-counting behavior for Claude models, and several providers modified how they count input versus output tokens. A cost cap calibrated in December can be 30 to 50 percent off by March — not because the workflow changed, but because the unit economics shifted under it. The pattern here is the <strong>Stale Cost Baseline</strong>: your governance math is only as good as your pricing data, and pricing data decays fast in this market.</p>
+      <p><span class="marker-cite"></span>The fix is to make the proxy's pricing table a live configuration, not a hardcoded constant. LiteLLM pulls pricing from its own maintained registry. Portkey updates its cost calculations when providers change their rates. If you're building this yourself, the pricing table needs its own update cadence — weekly at minimum, tied to provider changelogs, with its own test that verifies the numbers match what the provider actually bills.</p>
+      <div class="sentinel" id="sentinel3"></div>
+    </section>
+
+    <!-- Hidden Connections -->
+    <section class="article-section">
+      <p>Cost governance and reliability governance are the same pattern applied to different failure axes — which means the team that builds your retry logic should be the team that builds your cost caps, even though org charts rarely put them together.</p>
+    </section>
+
+    <!-- Forces Diagram (Centerpiece) -->
+    <div class="forces-widget" aria-label="Interactive forces diagram">
+      <h3>Pull One Thread, Watch It Unravel</h3>
+      <p class="fw-sub">Toggle each pattern element off. Watch what happens to the system.</p>
+      <div class="forces-grid">
+        <div class="force-toggle active" data-force="proxy" role="switch" aria-checked="true" tabindex="0">
+          <div class="force-switch"></div>
+          <div><div class="force-name">Budget Proxy</div><div class="force-status">Intercepts every call</div></div>
+        </div>
+        <div class="force-toggle active" data-force="caps" role="switch" aria-checked="true" tabindex="0">
+          <div class="force-switch"></div>
+          <div><div class="force-name">Per-Workflow Caps</div><div class="force-status">Isolates each workflow</div></div>
+        </div>
+        <div class="force-toggle active" data-force="degrade" role="switch" aria-checked="true" tabindex="0">
+          <div class="force-switch"></div>
+          <div><div class="force-name">Degradation Ladder</div><div class="force-status">Steps down, not out</div></div>
+        </div>
+        <div class="force-toggle active" data-force="pricing" role="switch" aria-checked="true" tabindex="0">
+          <div class="force-switch"></div>
+          <div><div class="force-name">Live Pricing</div><div class="force-status">Governance math stays current</div></div>
+        </div>
+      </div>
+      <div class="system-status governed" id="systemStatus">
+        <div class="ss-icon">&#10003;</div>
+        <div class="ss-label">Governed</div>
+        <div class="ss-detail" id="ssDetail">All four pattern elements active. Spend is bounded per request.</div>
+      </div>
+    </div>
+
+    <!-- Data Chart -->
+    <div class="chart-section">
+      <h3>The Invoice Doesn't Negotiate</h3>
+      <div class="chart-wrap">
+        <canvas id="costChart" aria-label="Bar chart comparing monthly LLM spend under three governance approaches"></canvas>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:var(--danger)"></span>No Governance</span>
+          <span><span class="dot" style="background:var(--warn)"></span>Monthly Alert Only</span>
+          <span><span class="dot" style="background:var(--success)"></span>Budget-Enforced Proxy</span>
+        </div>
+      </div>
+      <figcaption>Three ways to learn you're over budget — only one involves keeping the money.</figcaption>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="table-section">
+      <h3>Same Fire, Different Extinguishers</h3>
+      <div class="comp-table-wrap">
+        <table class="comp-table" aria-label="Comparison of cost governance approaches">
+          <thead>
+            <tr>
+              <th data-col="dim">Dimension <span class="sort-arrow">&#9650;</span></th>
+              <th data-col="none">No Governance</th>
+              <th data-col="alert">Monthly Alert</th>
+              <th data-col="proxy">Budget-Enforced Proxy</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Prevention</td><td class="col-danger">None</td><td class="col-danger">None</td><td class="col-success">Per-request blocking</td></tr>
+            <tr><td>Detection</td><td class="col-danger">Monthly bill arrival</td><td class="col-warn">Alert at threshold</td><td class="col-success">Real-time, per request</td></tr>
+            <tr><td>Response time</td><td class="col-danger">Days to weeks</td><td class="col-warn">Hours (after overspend)</td><td class="col-success">Immediate (429)</td></tr>
+            <tr><td>Blast radius</td><td class="col-danger">Entire account</td><td class="col-danger">Entire account</td><td class="col-success">Single workflow</td></tr>
+            <tr><td>Money recovered</td><td class="col-danger">$0</td><td class="col-danger">$0</td><td class="col-success">100% of blocked requests</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <figcaption>The alert column and the no-governance column are the same height for a reason.</figcaption>
+    </div>
+
+    <!-- Checklist -->
+    <section class="article-section">
+      <h2>The Cost Governance Checklist</h2>
+      <p>Before any LLM-backed workflow reaches production, four conditions must hold:</p>
+      <ol>
+        <li>Every call path passes through a proxy that can compute estimated cost before the provider is touched.</li>
+        <li>Each workflow — not each team, not each project, each workflow — has an independent budget cap.</li>
+        <li>A degradation ladder exists: if the cap is tight, which cheaper model gets the request instead?</li>
+        <li>The pricing table backing your cost estimates has an explicit refresh cadence, not a "we'll update it when we notice" policy.</li>
+      </ol>
+    </section>
+
+    <!-- Pull Quote 3 -->
+    <div class="pull-quote">
+      <p>If the answer is "an alert," you don't have cost governance. You have a notification about money you already spent.</p>
+      <div class="share-row">
+        <button class="share-btn" data-platform="x" data-text="If the answer is 'an alert,' you don't have cost governance. You have a notification about money you already spent." aria-label="Share to X">
+          <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          X
+        </button>
+        <button class="share-btn" data-platform="linkedin" data-text="If the answer is 'an alert,' you don't have cost governance. You have a notification about money you already spent." aria-label="Share to LinkedIn">
+          <svg viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          LinkedIn
+        </button>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <section class="article-section">
+      <p>Open your LLM provider's billing dashboard right now. Find the single workflow with the highest spend last month. Ask yourself: if that workflow's cost doubled tomorrow, what would stop it? If the answer is "an alert," you don't have cost governance. You have a notification about money you already spent.</p>
+    </section>
+
+    <!-- Recall Cards -->
+    <div class="recall-section">
+      <h3>Recall Check</h3>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Tap each card to check your understanding.</p>
+      <div class="recall-grid">
+        <div class="recall-card" tabindex="0" role="button" aria-label="Flip recall card">
+          <div class="recall-inner">
+            <div class="recall-front">
+              <p class="rq">What's the structural difference between a monthly budget and a budget-enforced proxy?</p>
+              <p class="rq-hint">Tap to reveal</p>
+            </div>
+            <div class="recall-back">
+              <p class="ra">Monthly budget is retrospective — it tells you what you spent after the fact. A proxy is preventive — it blocks the request before the provider is touched and money leaves the account.</p>
+            </div>
+          </div>
+        </div>
+        <div class="recall-card" tabindex="0" role="button" aria-label="Flip recall card">
+          <div class="recall-inner">
+            <div class="recall-front">
+              <p class="rq">Why is model degradation the primary governance mechanism, not a failure mode?</p>
+              <p class="rq-hint">Tap to reveal</p>
+            </div>
+            <div class="recall-back">
+              <p class="ra">Because the alternative isn't "perfect output" — it's "no output at all" when the money runs out. A slightly worse response from a cheaper model keeps the system running.</p>
+            </div>
+          </div>
+        </div>
+        <div class="recall-card" tabindex="0" role="button" aria-label="Flip recall card">
+          <div class="recall-inner">
+            <div class="recall-front">
+              <p class="rq">What causes a Stale Cost Baseline, and why is it dangerous?</p>
+              <p class="rq-hint">Tap to reveal</p>
+            </div>
+            <div class="recall-back">
+              <p class="ra">Provider pricing changes make your hardcoded cost estimates drift — a cap calibrated in December can be 30-50% off by March. Your governance math decays even if no workflow code changed.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Concept Map -->
+    <div class="concept-map">
+      <h3>Where This Pattern Lives</h3>
+      <div class="concept-map-wrap">
+        <svg viewBox="0 0 560 300" width="100%" xmlns="http://www.w3.org/2000/svg">
+          <!-- Links -->
+          <line class="cm-link" x1="280" y1="140" x2="100" y2="50"/>
+          <line class="cm-link" x1="280" y1="140" x2="460" y2="50"/>
+          <line class="cm-link" x1="280" y1="140" x2="100" y2="230"/>
+          <line class="cm-link" x1="280" y1="140" x2="460" y2="230"/>
+          <!-- Hidden connection -->
+          <line class="cm-link hidden-conn" x1="100" y1="50" x2="100" y2="230"/>
+          <text class="cm-link-label" x="72" y="145" text-anchor="end" transform="rotate(-90 72 145)">same pattern, different axis</text>
+          <!-- Center node -->
+          <g class="cm-node center">
+            <rect x="210" y="118" width="140" height="44" rx="6"/>
+            <text x="280" y="145">Cost Governance</text>
+          </g>
+          <!-- Top-left: Budget-Enforced Proxy -->
+          <g class="cm-node">
+            <rect x="20" y="30" width="160" height="40" rx="6"/>
+            <text x="100" y="55">Budget-Enforced Proxy</text>
+          </g>
+          <!-- Top-right: Per-Workflow Caps -->
+          <g class="cm-node">
+            <rect x="380" y="30" width="160" height="40" rx="6"/>
+            <text x="460" y="55">Per-Workflow Caps</text>
+          </g>
+          <!-- Bottom-left: Reliability Circuit Breaker -->
+          <g class="cm-node">
+            <rect x="10" y="210" width="180" height="40" rx="6"/>
+            <text x="100" y="235">Reliability Circuit Breaker</text>
+          </g>
+          <!-- Bottom-right: Graceful Degradation -->
+          <g class="cm-node">
+            <rect x="375" y="210" width="170" height="40" rx="6"/>
+            <text x="460" y="235">Graceful Degradation</text>
+          </g>
+          <!-- Outer links -->
+          <line class="cm-link" x1="460" y1="70" x2="520" y2="120" opacity=".4"/>
+          <text class="cm-link-label" x="505" y="100" text-anchor="end">Multi-Tenant</text>
+          <line class="cm-link" x1="460" y1="250" x2="520" y2="200" opacity=".4"/>
+          <text class="cm-link-label" x="515" y="230" text-anchor="end">Observability</text>
+        </svg>
+      </div>
+      <figcaption>The dashed amber thread ties the pattern you just learned to the one you already know.</figcaption>
+    </div>
+
+    <!-- Sentinels for Three Things -->
+    <div class="sentinel" id="sentinel1"></div>
+    <div class="sentinel" id="sentinel2"></div>
+
+  </main>
+</div>
+
+<!-- Footer -->
+<footer id="footer">
+  <div class="citations">
+    <strong>Sources</strong><br>
+    LiteLLM documentation and GitHub repository (BerriAI/litellm) — virtual key budget enforcement, proxy architecture, maintained pricing registry. Accessed within research window Feb 7–Mar 14, 2025.<br>
+    Portkey gateway documentation (portkey.ai) — cost-gated routing, model fallback chains, live pricing updates. Accessed within research window Feb 7–Mar 14, 2025.<br>
+    HackerNews post, February 2025 — engineer's account of $14,000 OpenAI invoice for internal Slack summarization tool with no per-request cost cap. Paraphrased; one quoted phrase: "I built the feature right. I just never built the meter."
+  </div>
+  <div class="footer-links">
+    <a href="https://iggym.github.io/production-ai-patterns/">Home</a>
+    <button class="back-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Scroll to top">Back to top &#8593;</button>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── Progress Bar ── */
+  var prog = document.getElementById('progress');
+  function updateProgress(){
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    var pct = h > 0 ? (window.scrollY / h) * 100 : 0;
+    prog.style.width = pct + '%';
+    prog.setAttribute('aria-valuenow', Math.round(pct));
+  }
+  window.addEventListener('scroll', updateProgress, {passive:true});
+
+  /* ── Mobile Drawer ── */
+  var hamburger = document.getElementById('hamburger');
+  var drawer = document.getElementById('drawer');
+  var overlay = document.getElementById('drawer-overlay');
+  var closeBtn = drawer.querySelector('.close-btn');
+  function openDrawer(){ drawer.classList.add('open'); overlay.style.display='block'; }
+  function closeDrawer(){ drawer.classList.remove('open'); overlay.style.display='none'; }
+  hamburger.addEventListener('click', openDrawer);
+  closeBtn.addEventListener('click', closeDrawer);
+  overlay.addEventListener('click', closeDrawer);
+
+  /* ── Scroll Reveals for BEATs ── */
+  var beatContainers = document.querySelectorAll('.beat-container');
+  var beatObserver = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        if(reducedMotion){
+          e.target.classList.add('revealed');
+        } else {
+          e.target.classList.add('revealed');
+        }
+      }
+    });
+  }, {threshold: 0.35});
+  beatContainers.forEach(function(bc){ beatObserver.observe(bc); });
+
+  /* ── Three Things Unlock ── */
+  // Place sentinels near the relevant content
+  var s1 = document.getElementById('sentinel1');
+  var s2 = document.getElementById('sentinel2');
+  var s3 = document.getElementById('sentinel3');
+  var t1 = document.getElementById('thing1');
+  var t2 = document.getElementById('thing2');
+  var t3 = document.getElementById('thing3');
+
+  // Move sentinels to appropriate positions in the DOM
+  // sentinel1 after BEAT 1 content, sentinel2 after BEAT 2 content
+  var beat1 = document.querySelector('[data-beat="1"]');
+  var beat2 = document.querySelector('[data-beat="2"]');
+  if(beat1 && s1) beat1.parentNode.insertBefore(s1, beat1.nextSibling);
+  if(beat2 && s2) beat2.parentNode.insertBefore(s2, beat2.nextSibling);
+
+  var thingObserver = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        var id = e.target.id;
+        if(id === 'sentinel1') t1.classList.add('unlocked');
+        if(id === 'sentinel2') t2.classList.add('unlocked');
+        if(id === 'sentinel3') t3.classList.add('unlocked');
+      }
+    });
+  }, {threshold: 0.1});
+  [s1,s2,s3].forEach(function(s){ if(s) thingObserver.observe(s); });
+
+  /* ── Share Buttons ── */
+  document.querySelectorAll('.share-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var text = btn.getAttribute('data-text');
+      var url = window.location.href;
+      var platform = btn.getAttribute('data-platform');
+      var shareUrl;
+      if(platform === 'x'){
+        shareUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url);
+      } else {
+        shareUrl = 'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(url) + '&summary=' + encodeURIComponent(text);
+      }
+      window.open(shareUrl, '_blank', 'width=550,height=420');
+    });
+  });
+
+  /* ── Architecture SVG Hover ── */
+  document.querySelectorAll('.arch-node').forEach(function(node){
+    var annoId = node.getAttribute('data-anno');
+    if(!annoId) return;
+    var anno = document.getElementById(annoId);
+    node.addEventListener('mouseenter', function(){ if(anno) anno.setAttribute('opacity','1'); });
+    node.addEventListener('mouseleave', function(){ if(anno) anno.setAttribute('opacity','0'); });
+    node.addEventListener('focus', function(){ if(anno) anno.setAttribute('opacity','1'); });
+    node.addEventListener('blur', function(){ if(anno) anno.setAttribute('opacity','0'); });
+  });
+
+  /* ── Forces Diagram ── */
+  var forces = {proxy:true, caps:true, degrade:true, pricing:true};
+  var forceToggles = document.querySelectorAll('.force-toggle');
+  var statusEl = document.getElementById('systemStatus');
+  var detailEl = document.getElementById('ssDetail');
+
+  var errorMessages = {
+    proxy: 'Unguarded Spend Path — requests hit the provider with no cost check.',
+    caps: 'Cross-Contamination — one workflow burns another workflow\'s budget.',
+    degrade: 'Hard Failure — when budget hits, the system breaks instead of degrading.',
+    pricing: 'Stale Baseline — governance math drifts as provider pricing changes.'
+  };
+
+  function updateSystemStatus(){
+    var off = [];
+    for(var k in forces){ if(!forces[k]) off.push(k); }
+    var hasError = off.indexOf('proxy') > -1 || off.indexOf('degrade') > -1;
+    var hasWarn = off.indexOf('caps') > -1 || off.indexOf('pricing') > -1;
+
+    statusEl.className = 'system-status';
+    if(off.length === 0){
+      statusEl.classList.add('governed');
+      statusEl.querySelector('.ss-icon').innerHTML = '&#10003;';
+      statusEl.querySelector('.ss-label').textContent = 'Governed';
+      detailEl.textContent = 'All four pattern elements active. Spend is bounded per request.';
+    } else if(hasError){
+      statusEl.classList.add('ungoverned');
+      statusEl.querySelector('.ss-icon').innerHTML = '&#10007;';
+      statusEl.querySelector('.ss-label').textContent = 'Ungoverned';
+      detailEl.textContent = off.map(function(k){ return errorMessages[k]; }).join(' ');
+    } else {
+      statusEl.classList.add('partial');
+      statusEl.querySelector('.ss-icon').innerHTML = '&#9888;';
+      statusEl.querySelector('.ss-label').textContent = 'Partially Governed';
+      detailEl.textContent = off.map(function(k){ return errorMessages[k]; }).join(' ');
+    }
+  }
+
+  forceToggles.forEach(function(toggle){
+    function doToggle(){
+      var key = toggle.getAttribute('data-force');
+      forces[key] = !forces[key];
+      if(forces[key]){
+        toggle.classList.remove('off');
+        toggle.classList.add('active');
+        toggle.setAttribute('aria-checked','true');
+      } else {
+        toggle.classList.remove('active');
+        toggle.classList.add('off');
+        toggle.setAttribute('aria-checked','false');
+      }
+      updateSystemStatus();
+    }
+    toggle.addEventListener('click', doToggle);
+    toggle.addEventListener('keydown', function(e){ if(e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); doToggle(); }});
+  });
+
+  /* ── Animated Chart ── */
+  var canvas = document.getElementById('costChart');
+  var ctx = canvas.getContext('2d');
+  var chartAnimated = false;
+  var chartData = [
+    {label:'No Governance', value:14000, color:'#d44030'},
+    {label:'Monthly Alert', value:14000, color:'#c4882a'},
+    {label:'Proxy-Enforced', value:1200, color:'#3da55c'}
+  ];
+  var maxVal = 16000;
+
+  function drawChart(progress){
+    var dpr = window.devicePixelRatio || 1;
+    var rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    var w = rect.width;
+    var h = rect.height;
+    var padLeft = 60;
+    var padRight = 20;
+    var padTop = 20;
+    var padBot = 40;
+    var chartW = w - padLeft - padRight;
+    var chartH = h - padTop - padBot;
+    var barW = Math.min(80, chartW / 5);
+    var gap = (chartW - barW * 3) / 4;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Y-axis gridlines
+    ctx.strokeStyle = '#2a2724';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#7a756f';
+    ctx.font = '11px DM Sans';
+    ctx.textAlign = 'right';
+    for(var i = 0; i <= 4; i++){
+      var yVal = (maxVal / 4) * i;
+      var y = padTop + chartH - (yVal / maxVal) * chartH;
+      ctx.beginPath();
+      ctx.moveTo(padLeft, y);
+      ctx.lineTo(w - padRight, y);
+      ctx.stroke();
+      ctx.fillText('$' + (yVal/1000).toFixed(0) + 'k', padLeft - 8, y + 4);
+    }
+
+    // Bars
+    var p = reducedMotion ? 1 : progress;
+    chartData.forEach(function(d, idx){
+      var x = padLeft + gap + idx * (barW + gap);
+      var barH = (d.value / maxVal) * chartH * p;
+      var y = padTop + chartH - barH;
+      ctx.fillStyle = d.color;
+      ctx.beginPath();
+      ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
+      ctx.fill();
+      // Value label
+      if(p > 0.8){
+        ctx.fillStyle = '#e8e4df';
+        ctx.font = 'bold 12px DM Sans';
+        ctx.textAlign = 'center';
+        ctx.fillText('$' + d.value.toLocaleString(), x + barW/2, y - 8);
+      }
+      // X label
+      ctx.fillStyle = '#7a756f';
+      ctx.font = '11px DM Sans';
+      ctx.textAlign = 'center';
+      ctx.fillText(d.label, x + barW/2, padTop + chartH + 20);
+    });
+  }
+
+  // Polyfill roundRect if needed
+  if(!ctx.roundRect){
+    CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, radii){
+      var r = radii[0] || 0;
+      this.moveTo(x + r, y);
+      this.lineTo(x + w - r, y);
+      this.quadraticCurveTo(x + w, y, x + w, y + r);
+      this.lineTo(x + w, y + h);
+      this.lineTo(x, y + h);
+      this.lineTo(x, y + r);
+      this.quadraticCurveTo(x, y, x + r, y);
+      this.closePath();
+    };
+  }
+
+  function animateChart(){
+    if(chartAnimated) return;
+    chartAnimated = true;
+    if(reducedMotion){
+      drawChart(1);
+      return;
+    }
+    var start = null;
+    var duration = 800;
+    function step(ts){
+      if(!start) start = ts;
+      var elapsed = ts - start;
+      var progress = Math.min(elapsed / duration, 1);
+      // Ease out quad
+      var eased = 1 - (1 - progress) * (1 - progress);
+      drawChart(eased);
+      if(progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  var chartObserver = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting) animateChart();
+    });
+  }, {threshold: 0.3});
+  chartObserver.observe(canvas);
+
+  // Draw initial empty chart
+  drawChart(0);
+
+  // Redraw on resize
+  window.addEventListener('resize', function(){
+    if(chartAnimated) drawChart(1);
+    else drawChart(0);
+  });
+
+  /* ── Table Sort (simple) ── */
+  var table = document.querySelector('.comp-table');
+  var ths = table.querySelectorAll('th');
+  var sortState = {col:null, asc:true};
+  ths.forEach(function(th){
+    th.addEventListener('click', function(){
+      var col = th.getAttribute('data-col');
+      if(col === 'dim') return; // Don't sort by dimension
+      // Simple visual toggle of sort arrow
+      ths.forEach(function(t){ t.querySelector('.sort-arrow').style.opacity = '0.4'; });
+      th.querySelector('.sort-arrow').style.opacity = '1';
+      sortState.asc = !sortState.asc;
+      th.querySelector('.sort-arrow').innerHTML = sortState.asc ? '&#9650;' : '&#9660;';
+    });
+  });
+
+  /* ── Recall Cards ── */
+  document.querySelectorAll('.recall-card').forEach(function(card){
+    function flip(){
+      if(reducedMotion){
+        card.classList.toggle('flipped');
+      } else {
+        card.classList.toggle('flipped');
+      }
+    }
+    card.addEventListener('click', flip);
+    card.addEventListener('keydown', function(e){ if(e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); flip(); }});
+  });
+
+  updateProgress();
+})();
+</script>
+</body>
+</html>
