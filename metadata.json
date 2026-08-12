@@ -111,6 +111,45 @@
       "reading_time_minutes": 6,
       "pinned": false,
       "research_window": "2026-01-14 to 2026-02-18"
-    }
+    },{
+  "id": "1042",
+  "slug": "predictive-token-budget-circuit-breaker",
+  "title": "Predictive Token-Budget Circuit Breaker",
+  "hook": "Cost governance is not an API gateway rate-limiting problem; it is a stateful graph execution gate.",
+  "path": "articles/predictive-token-budget-circuit-breaker.html",
+  "date": "2026-05-18",
+  "status": "published",
+  "format": "pattern",
+  "tags": ["cost-governance", "circuit-breaker", "architecture", "agentic-systems"],
+  "reading_time_minutes": 6,
+  "pinned": false,
+  "research_window": "2026-04-06 to 2026-05-18"
+},{
+  "id": "0047",
+  "slug": "your-budget-is-a-receipt",
+  "title": "Your Budget Is a Receipt",
+  "hook": "A monthly budget is a postmortem tool dressed up as a guardrail — real cost governance for LLM workflows lives in the request path, not the invoice.",
+  "path": "articles/your-budget-is-a-receipt.html",
+  "date": "2025-03-14",
+  "status": "published",
+  "format": "pattern",
+  "tags": ["cost-governance", "budget-enforced-proxy", "model-routing", "cost-caps"],
+  "reading_time_minutes": 5,
+  "pinned": false,
+  "research_window": "2025-02-07 to 2025-03-14"
+},{
+  "id": "0412",
+  "slug": "spend-state-circuit-breaker",
+  "title": "The Infinite Wallet",
+  "hook": "AI agents do not crash; they spend, and traditional reliability patterns are entirely blind to the financial blast radius of a probabilistic infinite loop.",
+  "path": "articles/spend-state-circuit-breaker.html",
+  "date": "2026-03-12",
+  "status": "published",
+  "format": "pattern",
+  "tags": ["cost-governance", "circuit-breakers", "agent-architecture"],
+  "reading_time_minutes": 6,
+  "pinned": false,
+  "research_window": "2026-02-05 to 2026-03-12"
+}
   ]
 }
