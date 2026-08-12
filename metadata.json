@@ -150,6 +150,45 @@
   "reading_time_minutes": 6,
   "pinned": false,
   "research_window": "2026-02-05 to 2026-03-12"
+}, {
+  "id": "0419",
+  "slug": "the-fungibility-trap",
+  "title": "The Fungibility Trap",
+  "hook": "Standard infrastructure assumes requests are fungible; probabilistic AI systems shatter this assumption, requiring cost governance to shift from the network layer to the semantic layer.",
+  "path": "articles/the-fungibility-trap.html",
+  "date": "2026-03-12",
+  "status": "published",
+  "format": "pattern",
+  "tags": ["cost-governance", "ai-gateway", "multi-tenant", "circuit-breakers"],
+  "reading_time_minutes": 6,
+  "pinned": false,
+  "research_window": "2026-01-29 to 2026-03-12"
+},{
+  "id": "0417",
+  "slug": "bounded-cascade-degradation",
+  "title": "Stop Retrying Your Agents: Bounded Cascade Degradation for LLM Pipelines",
+  "hook": "Standard retries make LLM agent pipelines worse — each retry inflates context, burns tokens, and lowers success probability.",
+  "path": "articles/bounded-cascade-degradation.html",
+  "date": "2025-03-18",
+  "status": "published",
+  "format": "pattern",
+  "tags": ["reliability", "retries", "agent-pipelines", "graceful-degradation"],
+  "reading_time_minutes": 6,
+  "pinned": false,
+  "research_window": "2025-02-10 to 2025-03-18"
+},{
+  "id": "1042",
+  "slug": "bleeding-tokens-silently",
+  "title": "Bleeding Tokens Silently",
+  "hook": "Financial governance for production AI is not an accounting audit; it is a real-time edge control-plane problem requiring synchronous token-bucket circuit breaking before inference executes.",
+  "path": "articles/bleeding-tokens-silently.html",
+  "date": "2026-03-14",
+  "status": "published",
+  "format": "pattern",
+  "tags": ["cost-governance", "circuit-breakers", "edge-proxy", "token-budgeting"],
+  "reading_time_minutes": 6,
+  "pinned": false,
+  "research_window": "2026-01-31 to 2026-03-14"
 }
   ]
 }
