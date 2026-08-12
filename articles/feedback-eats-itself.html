@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Feedback Eats Itself — Production AI Patterns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f2ec;--bg-dark:#1a1a2e;--fg:#2c2c34;--fg-light:#f0ece2;
+  --muted:#8a8a9a;--accent:#d4881c;--accent-light:#f0c36d;
+  --danger:#c93545;--success:#2d8f6c;--card:#fff;--border:#ddd8ce;
+  --glass:rgba(245,242,236,.82);--rail-w:220px;
+  --font-h:'Space Grotesk',sans-serif;--font-b:'Source Serif 4',Georgia,serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;font-size:17px}
+body{font-family:var(--font-b);color:var(--fg);background:var(--bg);line-height:1.7;overflow-x:hidden}
+h1,h2,h3,h4{font-family:var(--font-h);line-height:1.2;color:var(--fg)}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+/* ── Progress bar ── */
+#progress{position:fixed;top:0;left:0;height:3px;background:var(--accent);z-index:1001;width:0;transition:width .1s linear}
+/* ── Top bar ── */
+#topbar{position:sticky;top:0;z-index:1000;display:flex;align-items:center;gap:1rem;padding:.6rem 1.5rem;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+#topbar .home-link{font-family:var(--font-h);font-weight:700;font-size:.85rem;color:var(--fg);white-space:nowrap}
+#topbar .breadcrumb{font-size:.78rem;color:var(--muted)}
+#topbar .reading-time{font-size:.75rem;color:var(--muted);margin-left:auto;white-space:nowrap}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:.25rem}
+.hamburger svg{width:24px;height:24px;stroke:var(--fg);fill:none;stroke-width:2}
+/* ── Layout ── */
+.layout{display:grid;grid-template-columns:var(--rail-w) 1fr;max-width:1120px;margin:0 auto;min-height:calc(100vh - 52px)}
+#rail{position:sticky;top:52px;height:fit-content;padding:1.5rem 1rem 2rem .5rem;font-size:.8rem;align-self:start}
+#rail .rail-label{font-family:var(--font-h);font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.75rem}
+main{padding:2rem 2.5rem 4rem 2rem;min-width:0}
+/* ── Three things tracker ── */
+.thing-item{display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.65rem;padding:.5rem;border-radius:6px;background:var(--card);border:1px solid var(--border);transition:all .4s ease;opacity:.5}
+.thing-item.unlocked{opacity:1;border-color:var(--success);background:#f0faf5}
+.thing-icon{flex-shrink:0;width:20px;height:20px;margin-top:2px}
+.thing-icon.locked svg{fill:var(--muted)}.thing-icon.unlocked svg{fill:var(--success)}
+.thing-text{font-size:.78rem;line-height:1.4}
+/* ── Hero ── */
+.hero{margin-bottom:2.5rem}
+.hero h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:700;margin-bottom:.5rem;letter-spacing:-.02em}
+.hero .meta{font-size:.82rem;color:var(--muted);margin-bottom:1.5rem}
+/* ── Spectrum widget ── */
+.spectrum{display:flex;align-items:stretch;border-radius:10px;overflow:hidden;margin:2rem 0;border:1px solid var(--border);background:var(--card)}
+.spectrum-side{flex:1;padding:1.2rem 1.5rem;display:flex;flex-direction:column;justify-content:center}
+.spectrum-old{background:#fdf0e2;color:#8a5a1a}.spectrum-new{background:var(--bg-dark);color:var(--fg-light)}
+.spectrum-label{font-family:var(--font-h);font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;opacity:.6;margin-bottom:.4rem}
+.spectrum-text{font-family:var(--font-h);font-size:1.05rem;font-weight:600;line-height:1.35}
+.spectrum-bar{width:6px;background:linear-gradient(to bottom,#f0c36d,var(--danger));flex-shrink:0}
+/* ── Pull quotes ── */
+.pull-quote{position:relative;margin:2.5rem -1rem;padding:1.5rem 2rem 1.5rem 1.8rem;background:var(--bg-dark);color:var(--fg-light);border-radius:10px;font-family:var(--font-h);font-size:1.15rem;font-weight:600;line-height:1.45}
+.pull-quote::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent);border-radius:10px 0 0 10px}
+.pull-quote .share-row{display:flex;gap:.5rem;margin-top:.8rem}
+.share-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .6rem;border-radius:5px;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--fg-light);font-size:.72rem;font-family:var(--font-h);cursor:pointer;transition:background .2s}
+.share-btn:hover{background:rgba(255,255,255,.1);text-decoration:none}
+.share-btn svg{width:14px;height:14px;fill:currentColor}
+/* ── Article body ── */
+.article-body h2{font-size:1.5rem;margin:2.5rem 0 1rem;font-weight:700}
+.article-body p{margin-bottom:1.1rem}
+.article-body strong{font-weight:600}
+.article-body em{font-style:italic}
+/* ── Pattern card ── */
+.pattern-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.5rem;margin:2rem 0;position:sticky;top:60px;z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.pattern-card summary{font-family:var(--font-h);font-weight:700;font-size:.95rem;cursor:pointer;list-style:none;display:flex;align-items:center;gap:.5rem}
+.pattern-card summary::-webkit-details-marker{display:none}
+.pattern-card summary .arrow{transition:transform .2s;display:inline-block}
+.pattern-card[open] summary .arrow{transform:rotate(90deg)}
+.pattern-card .pc-section{margin-top:1rem}
+.pattern-card .pc-label{font-family:var(--font-h);font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700;margin-bottom:.3rem}
+.pattern-card .pc-text{font-size:.85rem;line-height:1.55;color:var(--fg)}
+/* ── Architecture SVG ── */
+.arch-wrap{margin:2.5rem 0;overflow-x:auto}
+.arch-wrap svg{display:block;margin:0 auto;max-width:100%}
+.arch-wrap figcaption{font-family:var(--font-h);font-size:.78rem;color:var(--muted);text-align:center;margin-top:.75rem;font-style:italic}
+/* ── Centerpiece forces widget ── */
+.forces-widget{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin:2.5rem 0}
+.forces-widget h3{font-size:1rem;margin-bottom:1rem;font-weight:700}
+.forces-controls{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem;margin-bottom:1.5rem}
+.force-toggle{display:flex;align-items:center;gap:.5rem;font-size:.82rem;cursor:pointer;padding:.4rem .6rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);transition:all .2s;font-family:var(--font-h)}
+.force-toggle.active{border-color:var(--success);background:#f0faf5}
+.force-toggle.active.danger{border-color:var(--danger);background:#fdf0f0}
+.force-toggle input{display:none}
+.force-check{width:16px;height:16px;border-radius:3px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.force-toggle.active .force-check{border-color:var(--success);background:var(--success)}
+.force-toggle.active.danger .force-check{border-color:var(--danger);background:var(--danger)}
+.force-check svg{width:10px;height:10px;stroke:#fff;fill:none;stroke-width:3;display:none}
+.force-toggle.active .force-check svg{display:block}
+.cap-bars{display:flex;flex-direction:column;gap:.5rem}
+.cap-row{display:flex;align-items:center;gap:.75rem}
+.cap-label{font-family:var(--font-h);font-size:.75rem;width:100px;text-align:right;flex-shrink:0;color:var(--muted)}
+.cap-track{flex:1;height:22px;background:#eee;border-radius:4px;overflow:hidden;position:relative}
+.cap-fill{height:100%;border-radius:4px;transition:width .8s ease,background .5s ease;background:var(--success)}
+.cap-fill.warning{background:var(--accent)}.cap-fill.danger{background:var(--danger)}
+.cap-val{font-family:var(--font-h);font-size:.72rem;width:36px;text-align:left;flex-shrink:0;opacity:0;transition:opacity .4s}
+.cap-val.visible{opacity:1}
+.dashboard-indicator{text-align:center;margin-top:1rem;padding:.6rem;border-radius:6px;font-family:var(--font-h);font-size:.82rem;font-weight:600;transition:all .5s}
+.dashboard-indicator.good{background:#e6f5ef;color:var(--success)}
+.dashboard-indicator.bad{background:#fde8ea;color:var(--danger)}
+.forces-widget figcaption{font-family:var(--font-h);font-size:.75rem;color:var(--muted);text-align:center;margin-top:1rem;font-style:italic}
+/* ── Beat reveal sections ── */
+.beat-section{transition:opacity .6s ease,transform .6s ease}
+.beat-section.revealed .beat-before{opacity:.35;text-decoration:line-through;text-decoration-color:var(--danger)}
+.beat-before{transition:opacity .5s,text-decoration .5s}
+.beat-after{opacity:0;transform:translateY(8px);transition:opacity .6s .2s,transform .6s .2s}
+.beat-section.revealed .beat-after{opacity:1;transform:translateY(0)}
+.beat-turn{opacity:0;max-height:0;overflow:hidden;transition:opacity .5s .5s,max-height .5s .5s}
+.beat-section.revealed .beat-turn{opacity:1;max-height:200px}
+/* ── Chart ── */
+.chart-wrap{margin:2.5rem 0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.5rem}
+.chart-wrap h3{font-size:.95rem;margin-bottom:1rem;font-weight:700;font-family:var(--font-h)}
+.chart-svg{width:100%;max-width:560px;margin:0 auto;display:block}
+.chart-legend{display:flex;gap:1.5rem;justify-content:center;margin-top:.75rem;font-family:var(--font-h);font-size:.78rem}
+.chart-legend span{display:flex;align-items:center;gap:.35rem}
+.chart-legend .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.chart-wrap figcaption{font-family:var(--font-h);font-size:.75rem;color:var(--muted);text-align:center;margin-top:1rem;font-style:italic}
+/* ── Comparison table ── */
+.comp-table-wrap{margin:2.5rem 0;overflow-x:auto}
+.comp-table{width:100%;border-collapse:collapse;font-size:.82rem;font-family:var(--font-h)}
+.comp-table th{text-align:left;padding:.6rem .8rem;background:var(--bg-dark);color:var(--fg-light);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;user-select:none;white-space:nowrap;border-bottom:2px solid var(--accent)}
+.comp-table th:hover{background:#252545}
+.comp-table th .sort-arrow{margin-left:.3rem;opacity:.4;font-size:.65rem}
+.comp-table th.sorted .sort-arrow{opacity:1;color:var(--accent)}
+.comp-table td{padding:.6rem .8rem;border-bottom:1px solid var(--border);vertical-align:top}
+.comp-table tr:hover td{background:rgba(212,136,28,.05)}
+.comp-table-wrap figcaption{font-family:var(--font-h);font-size:.75rem;color:var(--muted);text-align:center;margin-top:.75rem;font-style:italic}
+/* ── Retrieval cards ── */
+.retrieval-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin:2.5rem 0}
+.retrieval-card{perspective:600px;cursor:pointer;height:160px}
+.retrieval-inner{position:relative;width:100%;height:100%;transition:transform .5s;transform-style:preserve-3d}
+.retrieval-card.flipped .retrieval-inner{transform:rotateY(180deg)}
+.retrieval-front,.retrieval-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;padding:1rem;display:flex;flex-direction:column;justify-content:center}
+.retrieval-front{background:var(--bg-dark);color:var(--fg-light);font-family:var(--font-h);font-size:.85rem;line-height:1.4}
+.retrieval-front .rc-hint{font-size:.68rem;color:var(--muted);margin-top:.5rem}
+.retrieval-back{background:var(--card);border:1px solid var(--border);transform:rotateY(180deg);font-size:.82rem;line-height:1.5;color:var(--fg)}
+/* ── Concept map ── */
+.concept-map{margin:2.5rem 0}
+.concept-map svg{display:block;margin:0 auto;max-width:100%}
+.concept-map figcaption{font-family:var(--font-h);font-size:.75rem;color:var(--muted);text-align:center;margin-top:.75rem;font-style:italic}
+/* ── Icon markers ── */
+.icon-marker{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;flex-shrink:0;vertical-align:middle;margin-right:.3rem}
+.icon-marker.citation{background:#e8e0d0;color:#8a6d2b}
+.icon-marker.force-callout{background:#d4e8f0;color:#2a6b8a}
+.icon-marker.counter{background:#f0dfe0;color:#8a3a3a}
+.icon-marker svg{width:10px;height:10px}
+/* ── Footer ── */
+footer{background:var(--bg-dark);color:var(--fg-light);padding:2.5rem 2rem;margin-top:3rem}
+footer .footer-inner{max-width:800px;margin:0 auto}
+footer h4{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.75rem}
+footer .citations{font-size:.78rem;line-height:1.7;color:var(--muted)}
+footer .citations a{color:var(--accent-light)}
+footer .footer-links{margin-top:1.5rem;display:flex;gap:1rem}
+footer .footer-links a{font-family:var(--font-h);font-size:.8rem;color:var(--fg-light);border:1px solid rgba(255,255,255,.15);padding:.35rem .8rem;border-radius:5px;transition:background .2s}
+footer .footer-links a:hover{background:rgba(255,255,255,.08);text-decoration:none}
+/* ── Off-canvas drawer ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:998}
+.overlay.open{display:block}
+#drawer{position:fixed;top:0;left:0;bottom:0;width:280px;background:var(--bg);z-index:999;transform:translateX(-100%);transition:transform .3s ease;padding:1rem;overflow-y:auto}
+#drawer.open{transform:translateX(0)}
+#drawer .drawer-close{background:none;border:none;cursor:pointer;float:right;padding:.25rem}
+#drawer .drawer-close svg{width:20px;height:20px;stroke:var(--fg);fill:none;stroke-width:2}
+/* ── Reduced motion ── */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:0s!important;transition-duration:0s!important}
+  .beat-after{opacity:1;transform:none}
+  .beat-turn{opacity:1;max-height:200px}
+  .cap-fill{transition:none}
+  .retrieval-inner{transition:none}
+}
+/* ── Responsive ── */
+@media(max-width:880px){
+  .hamburger{display:block}
+  #rail{display:none}
+  .layout{grid-template-columns:1fr}
+  main{padding:1.5rem 1rem 3rem}
+  .forces-controls{grid-template-columns:1fr}
+  .pull-quote{margin:2rem -.5rem;padding:1.2rem 1.2rem 1.2rem 1.4rem;font-size:1rem}
+  .spectrum{flex-direction:column}
+  .spectrum-bar{width:100%;height:6px}
+  .retrieval-cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- Progress bar -->
+<div id="progress" role="progressbar" aria-label="Reading progress"></div>
+
+<!-- Top bar -->
+<header id="topbar">
+  <button class="hamburger" aria-label="Open menu" onclick="document.getElementById('drawer').classList.add('open');document.querySelector('.overlay').classList.add('open')">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <a href="https://iggym.github.io/production-ai-patterns/" class="home-link">Production AI Patterns</a>
+  <span class="breadcrumb">/ Data &amp; Feedback Loops</span>
+  <span class="reading-time" id="readTime"></span>
+</header>
+
+<!-- Off-canvas drawer (mobile) -->
+<div class="overlay" onclick="document.getElementById('drawer').classList.remove('open');this.classList.remove('open')"></div>
+<aside id="drawer">
+  <button class="drawer-close" aria-label="Close menu" onclick="document.getElementById('drawer').classList.remove('open');document.querySelector('.overlay').classList.remove('open')">
+    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+  <div id="drawerThings"></div>
+</aside>
+
+<div class="layout">
+  <!-- Rail -->
+  <aside id="rail" aria-label="Reading tracker">
+    <div class="rail-label">Insights Unlocked</div>
+    <div id="thingsTracker">
+      <div class="thing-item" id="thing0">
+        <span class="thing-icon locked"><svg viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="10" rx="2" fill="currentColor"/><path d="M7 8V5a3 3 0 016 0v3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>
+        <span class="thing-text">Aggregate metrics hide capability regression</span>
+      </div>
+      <div class="thing-item" id="thing1">
+        <span class="thing-icon locked"><svg viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="10" rx="2" fill="currentColor"/><path d="M7 8V5a3 3 0 016 0v3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>
+        <span class="thing-text">Good-enough output is the poison, not bad output</span>
+      </div>
+      <div class="thing-item" id="thing2">
+        <span class="thing-icon locked"><svg viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="10" rx="2" fill="currentColor"/><path d="M7 8V5a3 3 0 016 0v3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span>
+        <span class="thing-text">Quarantine belongs before the pipeline, not after</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main>
+    <!-- Hero -->
+    <div class="hero">
+      <h1>Feedback Eats Itself</h1>
+      <div class="meta">February 18, 2025 · Data &amp; Feedback Loops</div>
+    </div>
+
+    <!-- Spectrum widget: Bold Reframe -->
+    <div class="spectrum" role="region" aria-label="Bold reframe contrast">
+      <div class="spectrum-side spectrum-old">
+        <div class="spectrum-label">Common Belief</div>
+        <div class="spectrum-text">Feedback loops make AI systems better over time.</div>
+      </div>
+      <div class="spectrum-bar"></div>
+      <div class="spectrum-side spectrum-new">
+        <div class="spectrum-label">The Reframe</div>
+        <div class="spectrum-text">Feedback loops make AI systems narrower — and narrow looks like better until the edges collapse.</div>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+      <!-- Opening -->
+      <p>In December 2024, users across Reddit, X, and the OpenAI developer forum reported the same thing independently: ChatGPT had gotten lazy. Responses were shorter. Code was less complete. Step-by-step reasoning stopped mid-way. The model hadn't crashed. It hadn't been downgraded. By every aggregate satisfaction metric OpenAI tracked, it was performing <em>better</em> — users were upvoting responses at higher rates than ever.</p>
+
+      <!-- Architecture diagram -->
+      <div class="arch-wrap" id="archDiagram">
+        <svg viewBox="0 0 420 440" width="420" height="440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ChatGPT RLHF pipeline architecture with missing quarantine layer">
+          <!-- Layer 1 -->
+          <rect x="60" y="10" width="300" height="56" rx="8" fill="#e8e0d0" stroke="#c4b89a" stroke-width="1.5"/>
+          <text x="210" y="34" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="12" font-weight="700" fill="#5a4a2a">Layer 1 — ChatGPT Interface</text>
+          <text x="210" y="52" text-anchor="middle" font-family="Source Serif 4,serif" font-size="10" fill="#8a7a5a">Thumbs up/down · copy · regenerate · session length</text>
+          <!-- Arrow -->
+          <line x1="210" y1="66" x2="210" y2="90" stroke="#999" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <!-- Layer 2 -->
+          <rect x="60" y="90" width="300" height="56" rx="8" fill="#e8e0d0" stroke="#c4b89a" stroke-width="1.5"/>
+          <text x="210" y="114" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="12" font-weight="700" fill="#5a4a2a">Layer 2 — Feedback Aggregation</text>
+          <text x="210" y="132" text-anchor="middle" font-family="Source Serif 4,serif" font-size="10" fill="#8a7a5a">Signals → preference pairs for reward model</text>
+          <!-- GAP — the missing quarantine -->
+          <rect x="80" y="152" width="260" height="48" rx="8" fill="none" stroke="#c93545" stroke-width="2" stroke-dasharray="6 4" class="gap-rect">
+            <animate attributeName="stroke-opacity" values="1;0.3;1" dur="2.5s" repeatCount="indefinite"/>
+          </rect>
+          <text x="210" y="172" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="11" font-weight="600" fill="#c93545">MISSING: Distributional Monitoring</text>
+          <text x="210" y="188" text-anchor="middle" font-family="Source Serif 4,serif" font-size="9" fill="#c93545" opacity=".7">No check on whether feedback distribution shifted</text>
+          <!-- Arrow -->
+          <line x1="210" y1="200" x2="210" y2="224" stroke="#999" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <!-- Layer 3 -->
+          <rect x="60" y="224" width="300" height="56" rx="8" fill="#e8e0d0" stroke="#c4b89a" stroke-width="1.5"/>
+          <text x="210" y="248" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="12" font-weight="700" fill="#5a4a2a">Layer 3 — Reward Model</text>
+          <text x="210" y="266" text-anchor="middle" font-family="Source Serif 4,serif" font-size="10" fill="#8a7a5a">Trained on Scale AI human labels · scores responses</text>
+          <!-- Arrow -->
+          <line x1="210" y1="280" x2="210" y2="304" stroke="#999" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <!-- Layer 4 -->
+          <rect x="60" y="304" width="300" height="56" rx="8" fill="#e8e0d0" stroke="#c4b89a" stroke-width="1.5"/>
+          <text x="210" y="328" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="12" font-weight="700" fill="#5a4a2a">Layer 4 — PPO Optimization</text>
+          <text x="210" y="346" text-anchor="middle" font-family="Source Serif 4,serif" font-size="10" fill="#8a7a5a">Proximal Policy Optimization updates GPT-4 weights</text>
+          <!-- Arrow -->
+          <line x1="210" y1="360" x2="210" y2="384" stroke="#999" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <!-- Layer 5 -->
+          <rect x="60" y="384" width="300" height="46" rx="8" fill="#d4e8f0" stroke="#7ab8d4" stroke-width="1.5"/>
+          <text x="210" y="412" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="12" font-weight="700" fill="#2a5a7a">Layer 5 — Deployment</text>
+          <!-- Arrowhead marker -->
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#999"/>
+            </marker>
+          </defs>
+        </svg>
+        <figcaption>The pipeline's silent accomplice: everything flows through the gap unchecked.</figcaption>
+      </div>
+
+      <p>The pipeline had five layers: the ChatGPT interface collecting thumbs-up and thumbs-down signals; a feedback aggregation layer converting those into preference pairs; a reward model trained on human-labeled data via Scale AI, scoring new responses; a PPO optimization step updating GPT-4's weights based on that reward signal; and a deployment layer serving the updated model to all users. The gap sat between layers two and three — nothing measured whether the feedback distribution itself had shifted. The reward model was trained once, then applied indefinitely.</p>
+
+      <p>The system was doing exactly what its feedback loop asked. That was the problem.</p>
+
+      <!-- Pull quote 1 -->
+      <div class="pull-quote">
+        The loop doesn't improve the system. It narrows it. And narrow looks like better on a dashboard right up until the moment someone asks the system to do something it used to handle.
+        <div class="share-row">
+          <a class="share-btn" target="_blank" rel="noopener" id="shareX1">
+            <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            Share on X
+          </a>
+          <a class="share-btn" target="_blank" rel="noopener" id="shareLI1">
+            <svg viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            Share on LinkedIn
+          </a>
+        </div>
+      </div>
+
+      <h2>The Lie Your Dashboard Tells</h2>
+
+      <!-- BEAT 1 with scroll reveal -->
+      <div class="beat-section" id="beat1">
+        <p class="beat-before">The common mental model says: collect user feedback, retrain, repeat. Each cycle moves the system closer to what users want.</p>
+        <p class="beat-after">What actually happens is that each cycle moves the system closer to what users <em>upvote</em> — and what users upvote is systematically biased toward concise, familiar, low-effort-to-evaluate outputs. Thorough reasoning, creative alternatives, and edge-case handling don't get upvoted because most users don't recognize them when they see them. The feedback signal doesn't just miss these capabilities — it actively punishes them, because a thorough response takes longer to read and a creative one is harder to evaluate.</p>
+        <div class="beat-turn">
+          <p><strong>The turn:</strong> aggregate metric improvement and capability regression are not just different axes — they're often anti-correlated in feedback loops. The dashboard is measuring the wrong thing, and the loop amplifies the error.</p>
+        </div>
+      </div>
+
+      <p>People upvote answers that feel right, not answers that are right. There's a difference, and feedback loops can't see it.</p>
+
+      <h2>Same Wound, Different Symptom</h2>
+
+      <p>The pattern isn't limited to ChatGPT. Google's AI Overviews use click-through signals as feedback for overview generation. By January 2025, SEO analysts had documented that the system was amplifying sensational claims in overviews — because clicks correlate with curiosity and controversy, not truth. Same structure, different proxy metric, same silent degradation.</p>
+
+      <p>A January 2025 Oxford study validated the underlying mechanism with hard numbers. Using LLaMA-2 fine-tuned through Hugging Face's TRL library, researchers showed that even a 5% contamination rate of a model's own synthetic outputs in training data led to measurable distributional narrowing within two to three cycles. Vocabulary diversity — unique tokens per 10k generated — dropped. KL divergence from the original distribution increased monotonically. The contamination didn't have to be bad data. High-quality synthetic data caused the same narrowing, because any synthetic output is necessarily a subset of the original distribution. Each round prunes the tails.</p>
+
+      <!-- Pattern Card -->
+      <details class="pattern-card">
+        <summary><span class="arrow">▶</span> Quarantine Boundary — Pattern Card</summary>
+        <div class="pc-section">
+          <div class="pc-label">Problem</div>
+          <div class="pc-text">A feedback loop improves aggregate metrics while systematically narrowing capability distribution — invisible to standard monitoring until regression is entrenched.</div>
+        </div>
+        <div class="pc-section">
+          <div class="pc-label">Forces</div>
+          <div class="pc-text">Need feedback to improve, but feedback is a biased sample. Need to retrain to deploy, but biased feedback narrows distribution. Need speed, but distributional shift is invisible to standard metrics.</div>
+        </div>
+        <div class="pc-section">
+          <div class="pc-label">Solution</div>
+          <div class="pc-text">Isolation boundary between feedback collection and any weight-modifying path. Every batch is compared against a held-out reference set frozen at deployment. Checks: length distribution, vocabulary diversity, topic coverage, performance on hard examples the feedback signal would never generate. Shifted batches are held for human review, not discarded.</div>
+        </div>
+        <div class="pc-section">
+          <div class="pc-label">Consequences</div>
+          <div class="pc-text">Gains: detection of silent regression before compounding; named, auditable checkpoint for postmortems. Costs: some retraining velocity lost; operational burden of reference-set maintenance and comparison pipeline.</div>
+        </div>
+      </details>
+
+      <h2>Why Filtering Fails</h2>
+
+      <!-- BEAT 2 with scroll reveal -->
+      <div class="beat-section" id="beat2">
+        <p class="beat-before">The instinct is to fix this with better filtering — throw out low-quality feedback, weight high-quality feedback more heavily.</p>
+        <p class="beat-after">This doesn't work because the problem isn't data quality. It's data <em>completeness</em>. The feedback signal is missing entire regions of the capability space — regions that are hard to evaluate but essential for robustness. No amount of filtering recovers what was never measured. The quarantine boundary works because it doesn't try to recover missing signal. It detects when the signal you have has shifted the distribution away from your reference, and it stops the shift before it compounds.</p>
+        <div class="beat-turn">
+          <p><strong>The turn:</strong> from "clean the data" to "quarantine the data and measure the disease." The fix isn't in the data — it's in the boundary around the data.</p>
+        </div>
+      </div>
+
+      <!-- Pull quote 2 -->
+      <div class="pull-quote">
+        The quarantine boundary is structurally identical to change-data-capture isolation in database replication. In databases, we've known this for thirty years. In AI feedback loops, we're reinventing it incident by incident.
+        <div class="share-row">
+          <a class="share-btn" target="_blank" rel="noopener" id="shareX2">
+            <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            Share on X
+          </a>
+          <a class="share-btn" target="_blank" rel="noopener" id="shareLI2">
+            <svg viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            Share on LinkedIn
+          </a>
+        </div>
+      </div>
+
+      <!-- CENTERPIECE: Forces widget -->
+      <div class="forces-widget" id="forcesWidget" role="region" aria-label="Interactive forces diagram">
+        <h3>Watch the Poison Spread</h3>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem">Toggle each force on or off. Observe what the dashboard reports versus what the capability bars show.</p>
+        <div class="forces-controls">
+          <label class="force-toggle active danger" id="ftFeedback">
+            <input type="checkbox" checked>
+            <span class="force-check"><svg viewBox="0 0 10 10"><polyline points="1,5 4,8 9,2"/></svg></span>
+            Feedback Loop
+          </label>
+          <label class="force-toggle active danger" id="ftDashboard">
+            <input type="checkbox" checked>
+            <span class="force-check"><svg viewBox="0 0 10 10"><polyline points="1,5 4,8 9,2"/></svg></span>
+            Aggregate Dashboard
+          </label>
+          <label class="force-toggle" id="ftQuarantine">
+            <input type="checkbox">
+            <span class="force-check"><svg viewBox="0 0 10 10"><polyline points="1,5 4,8 9,2"/></svg></span>
+            Quarantine Boundary
+          </label>
+          <label class="force-toggle" id="ftReference">
+            <input type="checkbox">
+            <span class="force-check"><svg viewBox="0 0 10 10"><polyline points="1,5 4,8 9,2"/></svg></span>
+            Reference Set
+          </label>
+        </div>
+        <div class="cap-bars" id="capBars">
+          <div class="cap-row"><span class="cap-label">Reasoning</span><div class="cap-track"><div class="cap-fill" id="barReasoning" style="width:92%"></div></div><span class="cap-val" id="valReasoning">92%</span></div>
+          <div class="cap-row"><span class="cap-label">Creativity</span><div class="cap-track"><div class="cap-fill" id="barCreativity" style="width:88%"></div></div><span class="cap-val" id="valCreativity">88%</span></div>
+          <div class="cap-row"><span class="cap-label">Edge Cases</span><div class="cap-track"><div class="cap-fill" id="barEdge" style="width:85%"></div></div><span class="cap-val" id="valEdge">85%</span></div>
+          <div class="cap-row"><span class="cap-label">Code Depth</span><div class="cap-track"><div class="cap-fill" id="barCode" style="width:90%"></div></div><span class="cap-val" id="valCode">90%</span></div>
+          <div class="cap-row"><span class="cap-label">Factual Range</span><div class="cap-track"><div class="cap-fill" id="barFactual" style="width:94%"></div></div><span class="cap-val" id="valFactual">94%</span></div>
+        </div>
+        <div class="dashboard-indicator good" id="dashIndicator">System Health: 96%</div>
+        <figcaption>The dashboard cheers while the foundation crumbles — until you build the wall.</figcaption>
+      </div>
+
+      <!-- Data chart -->
+      <div class="chart-wrap" id="chartWrap">
+        <h3>Vocabulary Diversity Collapse</h3>
+        <svg class="chart-svg" viewBox="0 0 500 260" id="chartSvg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Line chart showing vocabulary diversity over training cycles">
+          <!-- Grid -->
+          <line x1="50" y1="20" x2="50" y2="210" stroke="#ddd" stroke-width="1"/>
+          <line x1="50" y1="210" x2="470" y2="210" stroke="#ddd" stroke-width="1"/>
+          <line x1="50" y1="20" x2="470" y2="20" stroke="#eee" stroke-width=".5" stroke-dasharray="4 3"/>
+          <line x1="50" y1="65" x2="470" y2="65" stroke="#eee" stroke-width=".5" stroke-dasharray="4 3"/>
+          <line x1="50" y1="115" x2="470" y2="115" stroke="#eee" stroke-width=".5" stroke-dasharray="4 3"/>
+          <line x1="50" y1="162" x2="470" y2="162" stroke="#eee" stroke-width=".5" stroke-dasharray="4 3"/>
+          <!-- Y labels -->
+          <text x="44" y="24" text-anchor="end" font-family="Space Grotesk" font-size="10" fill="#999">100%</text>
+          <text x="44" y="69" text-anchor="end" font-family="Space Grotesk" font-size="10" fill="#999">80%</text>
+          <text x="44" y="119" text-anchor="end" font-family="Space Grotesk" font-size="10" fill="#999">60%</text>
+          <text x="44" y="166" text-anchor="end" font-family="Space Grotesk" font-size="10" fill="#999">40%</text>
+          <text x="44" y="214" text-anchor="end" font-family="Space Grotesk" font-size="10" fill="#999">20%</text>
+          <!-- X labels -->
+          <text x="50" y="230" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#999">C0</text>
+          <text x="130" y="230" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#999">C1</text>
+          <text x="210" y="230" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#999">C2</text>
+          <text x="290" y="230" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#999">C3</text>
+          <text x="370" y="230" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#999">C4</text>
+          <text x="450" y="230" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#999">C5</text>
+          <text x="260" y="252" text-anchor="middle" font-family="Space Grotesk" font-size="11" fill="#888">Training Cycles (5% synthetic contamination)</text>
+          <!-- No-quarantine line: 100,94,85,72,58,41 → y = 210 - (val/100)*190 -->
+          <polyline id="lineNoQ" fill="none" stroke="#c93545" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+            points="50,20 130,31.4 210,48.5 290,73.2 370,99.8 450,132.1"
+            stroke-dasharray="800" stroke-dashoffset="800"/>
+          <!-- Dots for no-quarantine -->
+          <circle cx="50" cy="20" r="3.5" fill="#c93545" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin="0s" fill="freeze"/></circle>
+          <circle cx="130" cy="31.4" r="3.5" fill="#c93545" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin=".4s" fill="freeze"/></circle>
+          <circle cx="210" cy="48.5" r="3.5" fill="#c93545" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin=".8s" fill="freeze"/></circle>
+          <circle cx="290" cy="73.2" r="3.5" fill="#c93545" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin="1.2s" fill="freeze"/></circle>
+          <circle cx="370" cy="99.8" r="3.5" fill="#c93545" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin="1.6s" fill="freeze"/></circle>
+          <circle cx="450" cy="132.1" r="3.5" fill="#c93545" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin="2s" fill="freeze"/></circle>
+          <!-- With-quarantine line: 100,99,98,99,100,98 -->
+          <polyline id="lineQ" fill="none" stroke="#2d8f6c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+            points="50,20 130,21.9 210,23.8 290,21.9 370,20 450,23.8"
+            stroke-dasharray="800" stroke-dashoffset="800"/>
+          <circle cx="50" cy="20" r="3.5" fill="#2d8f6c" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin="0s" fill="freeze"/></circle>
+          <circle cx="130" cy="21.9" r="3.5" fill="#2d8f6c" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin=".4s" fill="freeze"/></circle>
+          <circle cx="210" cy="23.8" r="3.5" fill="#2d8f6c" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin=".8s" fill="freeze"/></circle>
+          <circle cx="290" cy="21.9" r="3.5" fill="#2d8f6c" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin="1.2s" fill="freeze"/></circle>
+          <circle cx="370" cy="20" r="3.5" fill="#2d8f6c" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin="1.6s" fill="freeze"/></circle>
+          <circle cx="450" cy="23.8" r="3.5" fill="#2d8f6c" opacity="0"><animate attributeName="opacity" from="0" to="1" dur=".3s" begin="2s" fill="freeze"/></circle>
+          <!-- Value labels for no-quarantine -->
+          <text x="50" y="14" text-anchor="middle" font-family="Space Grotesk" font-size="9" fill="#c93545" opacity="0" class="val-label">100%</text>
+          <text x="450" y="126" text-anchor="middle" font-family="Space Grotesk" font-size="9" fill="#c93545" opacity="0" class="val-label">41%</text>
+        </svg>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:#c93545"></span>Without quarantine</span>
+          <span><span class="dot" style="background:#2d8f6c"></span>With quarantine boundary</span>
+        </div>
+        <figcaption>Five cycles to forget half your vocabulary — or hold steady with one wall in the right place.</figcaption>
+      </div>
+
+      <!-- Comparison table -->
+      <div class="comp-table-wrap">
+        <table class="comp-table" id="compTable">
+          <thead>
+            <tr>
+              <th data-col="0">Dimension <span class="sort-arrow">▲</span></th>
+              <th data-col="1">ChatGPT RLHF <span class="sort-arrow">▲</span></th>
+              <th data-col="2">Google AI Overviews <span class="sort-arrow">▲</span></th>
+              <th data-col="3">Synthetic Collapse <span class="sort-arrow">▲</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Feedback signal</strong></td><td>User upvotes</td><td>Click-through rate</td><td>Own synthetic outputs</td></tr>
+            <tr><td><strong>Failure mode</strong></td><td>Capability narrowing</td><td>Accuracy degradation</td><td>Distribution collapse</td></tr>
+            <tr><td><strong>Detection difficulty</strong></td><td>High — hidden by metrics</td><td>Medium — visible in outputs</td><td>Low — measurable via KL</td></tr>
+            <tr><td><strong>Recovery cost</strong></td><td>Full retrain cycle</td><td>Pipeline reconfiguration</td><td>Data audit + retrain</td></tr>
+            <tr><td><strong>Time to detect</strong></td><td>Weeks</td><td>Days (public-facing)</td><td>Immediately if measured</td></tr>
+          </tbody>
+        </table>
+        <figcaption>Three faces of the same structural failure — the signal always measures the wrong thing.</figcaption>
+      </div>
+
+      <!-- Pull quote 3 -->
+      <div class="pull-quote">
+        The contamination didn't have to be bad data. High-quality synthetic data caused the same narrowing, because any synthetic output is necessarily a subset of the original distribution.
+        <div class="share-row">
+          <a class="share-btn" target="_blank" rel="noopener" id="shareX3">
+            <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            Share on X
+          </a>
+          <a class="share-btn" target="_blank" rel="noopener" id="shareLI3">
+            <svg viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            Share on LinkedIn
+          </a>
+        </div>
+      </div>
+
+      <h2>What to Do Tomorrow</h2>
+
+      <p>Freeze a reference set of 500 hard examples — cases your model handles correctly but that your typical user feedback would never generate — and wire a distributional check against it into your training pipeline. You can build this in a day. The quarantine threshold can start loose and tighten as you observe how much your feedback signal is already drifting.</p>
+
+      <!-- Retrieval practice cards -->
+      <div class="retrieval-cards">
+        <div class="retrieval-card" onclick="this.classList.toggle('flipped')" tabindex="0" role="button" aria-label="Flip to see answer">
+          <div class="retrieval-inner">
+            <div class="retrieval-front">
+              What's the difference between data quality and data completeness in a feedback loop?
+              <div class="rc-hint">Tap to reveal</div>
+            </div>
+            <div class="retrieval-back">Quality is about removing bad samples. Completeness is about whether the signal covers the full capability space. Filtering fixes quality; it cannot fix completeness — missing regions stay missing no matter how clean the rest is.</div>
+          </div>
+        </div>
+        <div class="retrieval-card" onclick="this.classList.toggle('flipped')" tabindex="0" role="button" aria-label="Flip to see answer">
+          <div class="retrieval-inner">
+            <div class="retrieval-front">
+              Why does a quarantine boundary work better than filtering?
+              <div class="rc-hint">Tap to reveal</div>
+            </div>
+            <div class="retrieval-back">Because it doesn't try to recover missing signal. It detects when the available signal has shifted the distribution away from a known-good reference, and it halts the shift before it compounds. It's a structural fix, not a data-cleaning fix.</div>
+          </div>
+        </div>
+        <div class="retrieval-card" onclick="this.classList.toggle('flipped')" tabindex="0" role="button" aria-label="Flip to see answer">
+          <div class="retrieval-inner">
+            <div class="retrieval-front">
+              What traditional engineering pattern mirrors the quarantine boundary?
+              <div class="rc-hint">Tap to reveal</div>
+            </div>
+            <div class="retrieval-back">Change-data-capture isolation in database replication. A stream of mutations looks valid individually but corrupts the target if applied without checking against a known-good state. Same structure, same failure mode, thirty years of prior art.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Concept map -->
+      <div class="concept-map">
+        <svg viewBox="0 0 520 340" width="520" height="340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Concept map relating quarantine boundary to adjacent patterns">
+          <!-- Center node -->
+          <rect x="170" y="135" width="180" height="50" rx="25" fill="#d4881c" opacity=".9"/>
+          <text x="260" y="165" text-anchor="middle" font-family="Space Grotesk" font-size="13" font-weight="700" fill="#fff">Quarantine Boundary</text>
+          <!-- Connected nodes -->
+          <rect x="10" y="30" width="150" height="42" rx="8" fill="#f0ece2" stroke="#c4b89a" stroke-width="1"/>
+          <text x="85" y="55" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#5a4a2a">Reward-Model Narrowing</text>
+          <line x1="160" y1="55" x2="190" y2="145" stroke="#c4b89a" stroke-width="1.2" marker-end="url(#mapArrow)"/>
+
+          <rect x="360" y="30" width="150" height="42" rx="8" fill="#f0ece2" stroke="#c4b89a" stroke-width="1"/>
+          <text x="435" y="55" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#5a4a2a">Engagement Misalignment</text>
+          <line x1="360" y1="55" x2="330" y2="145" stroke="#c4b89a" stroke-width="1.2" marker-end="url(#mapArrow)"/>
+
+          <rect x="10" y="260" width="150" height="42" rx="8" fill="#f0ece2" stroke="#c4b89a" stroke-width="1"/>
+          <text x="85" y="285" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#5a4a2a">Synthetic Contamination</text>
+          <line x1="160" y1="275" x2="190" y2="180" stroke="#c4b89a" stroke-width="1.2" marker-end="url(#mapArrow)"/>
+
+          <rect x="340" y="260" width="170" height="42" rx="8" fill="#d4e8f0" stroke="#7ab8d4" stroke-width="1"/>
+          <text x="425" y="285" text-anchor="middle" font-family="Space Grotesk" font-size="10" fill="#2a5a7a">CDC Isolation (DB pattern)</text>
+          <line x1="340" y1="275" x2="330" y2="180" stroke="#7ab8d4" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#mapArrowBlue)"/>
+
+          <defs>
+            <marker id="mapArrow" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
+              <polygon points="0 0,6 2.5,0 5" fill="#c4b89a"/>
+            </marker>
+            <marker id="mapArrowBlue" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
+              <polygon points="0 0,6 2.5,0 5" fill="#7ab8d4"/>
+            </marker>
+          </defs>
+        </svg>
+        <figcaption>The quarantine boundary sits at the intersection of three failure modes and one thirty-year-old solution from another domain.</figcaption>
+      </div>
+
+    </div><!-- /article-body -->
+  </main>
+</div><!-- /layout -->
+
+<footer>
+  <div class="footer-inner">
+    <h4>Citations</h4>
+    <div class="citations">
+      <p>ChatGPT "lazy" responses — user reports on Reddit (r/ChatGPT), X, and OpenAI developer forum, December 2024–January 2025. Sam Altman acknowledgment on X, December 2024. Pipeline architecture based on published descriptions of OpenAI's RLHF process using Scale AI for human labeling and PPO for policy optimization.</p>
+      <p>Google AI Overviews click-feedback misalignment — SEO analyst reports and Search Engine Land coverage, January 2025. AI Overviews built on Gemini with click-through-rate signals in the Google Search ranking pipeline.</p>
+      <p>Model collapse via synthetic contamination — Oxford researchers, January 2025, extending Shumailov et al. (2023). Experiments used LLaMA-2 fine-tuning via Hugging Face TRL library, tracked via Weights &amp; Biases (KL divergence, vocabulary diversity metrics). 5% contamination rate → measurable narrowing within 2–3 cycles.</p>
+    </div>
+    <div class="footer-links">
+      <a href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false">Back to top</a>
+      <a href="https://iggym.github.io/production-ai-patterns/">Home</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  /* ── Reading time ── */
+  const bodyText = document.querySelector('.article-body').innerText;
+  const words = bodyText.split(/\s+/).length;
+  const mins = Math.max(1, Math.ceil(words / 220));
+  document.getElementById('readTime').textContent = mins + ' min read';
+
+  /* ── Progress bar ── */
+  const progressBar = document.getElementById('progress');
+  window.addEventListener('scroll', function(){
+    const h = document.documentElement.scrollHeight - window.innerHeight;
+    progressBar.style.width = (h > 0 ? (window.scrollY / h) * 100 : 0) + '%';
+  }, {passive:true});
+
+  /* ── Share buttons ── */
+  const pageUrl = encodeURIComponent(window.location.href);
+  const quotes = [
+    'The loop doesn\'t improve the system. It narrows it. And narrow looks like better on a dashboard.',
+    'The quarantine boundary is structurally identical to change-data-capture isolation in database replication. In databases, we\'ve known this for thirty years.',
+    'The contamination didn\'t have to be bad data. High-quality synthetic data caused the same narrowing.'
+  ];
+  for(let i = 0; i < 3; i++){
+    const xBtn = document.getElementById('shareX'+(i+1));
+    const liBtn = document.getElementById('shareLI'+(i+1));
+    if(xBtn) xBtn.href = 'https://x.com/intent/tweet?text=' + encodeURIComponent(quotes[i]) + '&url=' + pageUrl;
+    if(liBtn) liBtn.href = 'https://www.linkedin.com/sharing/share-offsite/?url=' + pageUrl + '&summary=' + encodeURIComponent(quotes[i]);
+  }
+
+  /* ── Three Things tracker ── */
+  const thingMarkers = [
+    document.querySelector('[data-thing="0"]'),
+    document.querySelector('[data-thing="1"]'),
+    document.querySelector('[data-thing="2"]')
+  ];
+  // We'll insert invisible markers into the article at the right positions
+  // Thing 0: after "The system was doing exactly what its feedback loop asked."
+  // Thing 1: after "Each round prunes the tails."
+  // Thing 2: after "stops the shift before it compounds." in BEAT 2
+  // Create markers
+  const articleBody = document.querySelector('.article-body');
+  const allP = articleBody.querySelectorAll('p');
+  const markerTexts = [
+    'The system was doing exactly what its feedback loop asked.',
+    'Each round prunes the tails.',
+    'stops the shift before it compounds.'
+  ];
+  const markerEls = [];
+  markerTexts.forEach(function(txt, i){
+    const el = document.createElement('span');
+    el.setAttribute('data-thing', i);
+    el.style.display = 'none';
+    for(let j = 0; j < allP.length; j++){
+      if(allP[j].textContent.includes(txt)){
+        allP[j].appendChild(el);
+        break;
+      }
+    }
+    markerEls.push(el);
+  });
+
+  function unlockThing(idx){
+    const item = document.getElementById('thing'+idx);
+    if(!item || item.classList.contains('unlocked')) return;
+    item.classList.add('unlocked');
+    const icon = item.querySelector('.thing-icon');
+    icon.classList.remove('locked');
+    icon.classList.add('unlocked');
+    icon.innerHTML = '<svg viewBox="0 0 20 20"><path d="M10 2l2.5 5 5.5.8-4 3.9.9 5.3L10 14.3 5.1 17l.9-5.3-4-3.9 5.5-.8z" fill="currentColor"/></svg>';
+  }
+
+  const thingObs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        const idx = parseInt(e.target.getAttribute('data-thing'));
+        unlockThing(idx);
+      }
+    });
+  }, {threshold:0.5});
+  markerEls.forEach(function(el){ if(el) thingObs.observe(el); });
+
+  /* ── Beat scroll reveals ── */
+  const beatObs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting) e.target.classList.add('revealed');
+    });
+  }, {threshold:0.3});
+  document.querySelectorAll('.beat-section').forEach(function(el){ beatObs.observe(el); });
+
+  /* ── Chart animation on scroll ── */
+  const chartAnimated = {done:false};
+  const chartObs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting && !chartAnimated.done){
+        chartAnimated.done = true;
+        const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if(prefersReduced){
+          document.getElementById('lineNoQ').style.strokeDashoffset = '0';
+          document.getElementById('lineQ').style.strokeDashoffset = '0';
+          document.querySelectorAll('.val-label').forEach(function(l){ l.setAttribute('opacity','1'); });
+          document.querySelectorAll('#chartSvg circle').forEach(function(c){ c.setAttribute('opacity','1'); });
+        } else {
+          document.getElementById('lineNoQ').style.transition = 'stroke-dashoffset 2s ease';
+          document.getElementById('lineNoQ').style.strokeDashoffset = '0';
+          setTimeout(function(){
+            document.getElementById('lineQ').style.transition = 'stroke-dashoffset 2s ease';
+            document.getElementById('lineQ').style.strokeDashoffset = '0';
+          }, 600);
+          setTimeout(function(){
+            document.querySelectorAll('.val-label').forEach(function(l){ l.setAttribute('opacity','1'); });
+          }, 2200);
+        }
+      }
+    });
+  }, {threshold:0.4});
+  chartObs.observe(document.getElementById('chartWrap'));
+
+  /* ── Forces widget ── */
+  const forces = {
+    feedback: {el: document.getElementById('ftFeedback'), on: true},
+    dashboard: {el: document.getElementById('ftDashboard'), on: true},
+    quarantine: {el: document.getElementById('ftQuarantine'), on: false},
+    reference: {el: document.getElementById('ftReference'), on: false}
+  };
+  const bars = {
+    reasoning: {el: document.getElementById('barReasoning'), valEl: document.getElementById('valReasoning'), base: 92},
+    creativity: {el: document.getElementById('barCreativity'), valEl: document.getElementById('valCreativity'), base: 88},
+    edge: {el: document.getElementById('barEdge'), valEl: document.getElementById('valEdge'), base: 85},
+    code: {el: document.getElementById('barCode'), valEl: document.getElementById('valCode'), base: 90},
+    factual: {el: document.getElementById('barFactual'), valEl: document.getElementById('valFactual'), base: 94}
+  };
+  const dashEl = document.getElementById('dashIndicator');
+  let cycle = 0;
+  let interval = null;
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  Object.keys(forces).forEach(function(key){
+    forces[key].el.querySelector('input').addEventListener('change', function(){
+      forces[key].on = this.checked;
+      forces[key].el.classList.toggle('active', this.checked);
+      resetSim();
+    });
+  });
+
+  function resetSim(){
+    cycle = 0;
+    if(interval) clearInterval(interval);
+    updateBars();
+    if(forces.feedback.on && !forces.quarantine.on && !prefersReduced){
+      interval = setInterval(function(){
+        if(cycle < 8){ cycle++; updateBars(); }
+        else clearInterval(interval);
+      }, 700);
+    }
+  }
+
+  function updateBars(){
+    const showVals = forces.reference.on;
+    let dashScore = 96;
+    Object.keys(bars).forEach(function(key){
+      const b = bars[key];
+      let val = b.base;
+      if(forces.feedback.on && !forces.quarantine.on){
+        val = Math.max(15, b.base - cycle * (6 + Math.random()*4));
+      }
+      const pct = Math.round(val);
+      b.el.style.width = pct + '%';
+      b.el.classList.remove('warning','danger');
+      if(pct < 50) b.el.classList.add('danger');
+      else if(pct < 75) b.el.classList.add('warning');
+      if(showVals){
+        b.valEl.textContent = pct + '%';
+        b.valEl.classList.add('visible');
+      } else {
+        b.valEl.classList.remove('visible');
+      }
+    });
+    if(forces.feedback.on && !forces.quarantine.on && forces.dashboard.on){
+      dashScore = Math.max(88, 96 - cycle * 0.5);
+      dashEl.textContent = 'System Health: ' + Math.round(dashScore) + '%';
+      dashEl.className = 'dashboard-indicator good';
+    } else if(forces.feedback.on && !forces.quarantine.on && !forces.dashboard.on){
+      dashEl.textContent = 'Dashboard: disabled';
+      dashEl.className = 'dashboard-indicator bad';
+    } else if(forces.quarantine.on){
+      dashEl.textContent = 'System Health: 95% — quarantine active';
+      dashEl.className = 'dashboard-indicator good';
+    } else {
+      dashEl.textContent = 'System Health: 95% — no feedback loop';
+      dashEl.className = 'dashboard-indicator good';
+    }
+  }
+  resetSim();
+
+  /* ── Sortable comparison table ── */
+  const table = document.getElementById('compTable');
+  const headers = table.querySelectorAll('th');
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+  let sortCol = -1;
+  let sortAsc = true;
+  headers.forEach(function(th){
+    th.addEventListener('click', function(){
+      const col = parseInt(this.getAttribute('data-col'));
+      if(sortCol === col) sortAsc = !sortAsc;
+      else { sortCol = col; sortAsc = true; }
+      headers.forEach(function(h){ h.classList.remove('sorted'); });
+      this.classList.add('sorted');
+      this.querySelector('.sort-arrow').textContent = sortAsc ? '▲' : '▼';
+      rows.sort(function(a,b){
+        const aText = a.children[col].textContent.trim();
+        const bText = b.children[col].textContent.trim();
+        return sortAsc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+      });
+      const tbody = table.querySelector('tbody');
+      rows.forEach(function(r){ tbody.appendChild(r); });
+    });
+  });
+
+  /* ── Architecture diagram hover annotations ── */
+  const archSvg = document.querySelector('.arch-wrap svg');
+  const gapRect = archSvg.querySelector('.gap-rect');
+  // Add tooltip on hover for the gap
+  const tooltip = document.createElement('div');
+  tooltip.style.cssText = 'position:fixed;background:#1a1a2e;color:#f0ece2;padding:.6rem .8rem;border-radius:6px;font-family:Space Grotesk,sans-serif;font-size:.78rem;max-width:240px;pointer-events:none;opacity:0;transition:opacity .2s;z-index:100;line-height:1.4;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+  tooltip.textContent = 'This is where distributional monitoring should sit — comparing feedback batches against a held-out reference set before they reach the reward model.';
+  document.body.appendChild(tooltip);
+  gapRect.style.cursor = 'help';
+  gapRect.addEventListener('mouseenter', function(e){ tooltip.style.opacity = '1'; });
+  gapRect.addEventListener('mousemove', function(e){ tooltip.style.left = (e.clientX + 12) + 'px'; tooltip.style.top = (e.clientY - 10) + 'px'; });
+  gapRect.addEventListener('mouseleave', function(){ tooltip.style.opacity = '0'; });
+
+  /* ── Keyboard support for retrieval cards ── */
+  document.querySelectorAll('.retrieval-card').forEach(function(card){
+    card.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); this.classList.toggle('flipped'); }
+    });
+  });
+
+  /* ── Copy three things to mobile drawer ── */
+  const drawerThings = document.getElementById('drawerThings');
+  if(drawerThings){
+    drawerThings.innerHTML = '<div class="rail-label" style="margin-top:1.5rem">Insights Unlocked</div>' + document.getElementById('thingsTracker').innerHTML;
+    // Sync unlock state
+    const origItems = document.querySelectorAll('#thingsTracker .thing-item');
+    const drawerItems = drawerThings.querySelectorAll('.thing-item');
+    const mutObs = new MutationObserver(function(){
+      origItems.forEach(function(orig, i){
+        if(orig.classList.contains('unlocked')){
+          drawerItems[i].classList.add('unlocked');
+          const icon = drawerItems[i].querySelector('.thing-icon');
+          icon.classList.remove('locked');
+          icon.classList.add('unlocked');
+          icon.innerHTML = '<svg viewBox="0 0 20 20"><path d="M10 2l2.5 5 5.5.8-4 3.9.9 5.3L10 14.3 5.1 17l.9-5.3-4-3.9 5.5-.8z" fill="currentColor"/></svg>';
+        }
+      });
+    });
+    origItems.forEach(function(item){ mutObs.observe(item, {attributes:true, attributeFilter:['class']}); });
+  }
+})();
+</script>
+</body>
+</html>
