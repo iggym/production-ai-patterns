@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stop Retrying Your Agents — production-ai-patterns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0C0B09;
+  --bg2: #161412;
+  --fg: #E8E0D4;
+  --fg-dim: #B5ADA3;
+  --muted: #7A746D;
+  --accent: #D4873F;
+  --accent2: #2A9D8F;
+  --danger: #C44536;
+  --card: #1A1816;
+  --border: #2D2926;
+  --glass: rgba(12,11,9,0.88);
+  --glass-border: rgba(212,135,63,0.15);
+  --rail-w: 220px;
+  --topbar-h: 56px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'IBM Plex Serif', Georgia, serif;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.7;
+  font-size: 17px;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--accent); color: var(--bg); }
+
+/* Progress bar */
+#progress {
+  position: fixed; top: 0; left: 0; height: 3px; z-index: 1001;
+  background: var(--accent); width: 0; transition: width 0.1s linear;
+}
+
+/* Topbar */
+#topbar {
+  position: fixed; top: 3px; left: 0; right: 0; height: var(--topbar-h);
+  background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--glass-border);
+  display: flex; align-items: center; padding: 0 24px; z-index: 1000;
+  gap: 16px;
+}
+#topbar .home-link {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 14px;
+  color: var(--accent); text-decoration: none; white-space: nowrap;
+  letter-spacing: -0.3px;
+}
+#topbar .breadcrumb {
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#topbar .breadcrumb span { color: var(--fg-dim); }
+#topbar .reading-time {
+  margin-left: auto; font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px; color: var(--muted); white-space: nowrap;
+}
+#hamburger {
+  display: none; background: none; border: none; cursor: pointer; padding: 4px;
+  margin-left: auto;
+}
+#hamburger svg { stroke: var(--fg-dim); }
+
+/* Layout */
+.layout {
+  display: grid; grid-template-columns: var(--rail-w) 1fr;
+  margin-top: calc(var(--topbar-h) + 3px); min-height: calc(100vh - var(--topbar-h));
+}
+
+/* Rail */
+#rail {
+  position: sticky; top: calc(var(--topbar-h) + 12px);
+  height: fit-content; max-height: calc(100vh - var(--topbar-h) - 24px);
+  padding: 20px 16px; overflow-y: auto;
+  border-right: 1px solid var(--border);
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px;
+}
+#rail h3 { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.things-item {
+  display: flex; align-items: flex-start; gap: 8px; padding: 10px 0;
+  border-bottom: 1px solid var(--border); color: var(--muted);
+  transition: color 0.4s, opacity 0.4s;
+}
+.things-item.unlocked { color: var(--fg-dim); }
+.things-item .lock {
+  flex-shrink: 0; width: 16px; height: 16px; margin-top: 2px;
+  transition: transform 0.4s, opacity 0.4s;
+}
+.things-item.unlocked .lock { transform: rotate(15deg); }
+.things-item .lock svg { width: 16px; height: 16px; }
+.things-item .lock .locked-icon { stroke: var(--muted); }
+.things-item .lock .unlocked-icon { stroke: var(--accent); display: none; }
+.things-item.unlocked .lock .locked-icon { display: none; }
+.things-item.unlocked .lock .unlocked-icon { display: block; }
+.rail-nav { margin-top: 24px; }
+.rail-nav a {
+  display: block; padding: 6px 0; color: var(--muted); text-decoration: none;
+  font-size: 13px; transition: color 0.2s;
+}
+.rail-nav a:hover, .rail-nav a.active { color: var(--accent); }
+
+/* Main */
+main {
+  max-width: 780px; padding: 48px 40px 80px; margin: 0 auto;
+  width: 100%;
+}
+
+/* Hero */
+.hero { margin-bottom: 48px; }
+.hero h1 {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+  font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.1;
+  color: var(--fg); letter-spacing: -1px; margin-bottom: 16px;
+}
+.hero .meta {
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px;
+  color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap;
+}
+
+/* Spectrum widget */
+.spectrum {
+  margin: 40px 0; padding: 32px; border-radius: 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: center;
+}
+.spectrum .naive {
+  text-align: right; color: var(--muted); font-style: italic;
+  font-size: 15px; text-decoration: line-through; text-decoration-color: var(--danger);
+  opacity: 0.7;
+}
+.spectrum .divider {
+  width: 2px; height: 60px; background: linear-gradient(to bottom, var(--danger), var(--accent));
+  border-radius: 1px; justify-self: center;
+}
+.spectrum .bold {
+  color: var(--accent); font-weight: 600; font-size: 16px;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+/* Article body */
+.article-body h2 {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 600;
+  font-size: 22px; margin: 48px 0 16px; color: var(--fg);
+  letter-spacing: -0.5px;
+}
+.article-body p { margin-bottom: 20px; color: var(--fg-dim); }
+.article-body strong { color: var(--fg); font-weight: 600; }
+.article-body .pattern-name {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+  color: var(--accent); font-size: 18px; display: block; margin-bottom: 8px;
+}
+
+/* Beat reveals */
+.beat-reveal {
+  margin: 32px 0; padding: 24px; border-radius: 10px;
+  background: var(--bg2); border: 1px solid var(--border);
+  overflow: hidden;
+}
+.beat-reveal .before, .beat-reveal .after, .beat-reveal .turn {
+  display: block; font-family: 'Space Grotesk', sans-serif;
+  transition: opacity 0.6s, transform 0.6s;
+}
+.beat-reveal .before {
+  font-size: 14px; color: var(--muted); text-decoration: line-through;
+  text-decoration-color: var(--danger); margin-bottom: 12px;
+}
+.beat-reveal .after {
+  font-size: 16px; color: var(--accent); font-weight: 600; margin-bottom: 8px;
+}
+.beat-reveal .turn {
+  font-size: 13px; color: var(--fg-dim); font-style: italic;
+}
+.beat-reveal.not-visible .before { opacity: 0; transform: translateY(10px); }
+.beat-reveal.not-visible .after { opacity: 0; transform: translateY(10px); }
+.beat-reveal.not-visible .turn { opacity: 0; transform: translateY(10px); }
+.beat-reveal.visible .before { opacity: 0.5; transform: translateY(0); }
+.beat-reveal.visible .after { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
+.beat-reveal.visible .turn { opacity: 1; transform: translateY(0); transition-delay: 0.5s; }
+
+/* Pull quotes */
+.pull-quote {
+  margin: 48px 0; padding: 28px 32px; border-radius: 10px;
+  border-left: 4px solid var(--accent); background: var(--bg2);
+  position: relative;
+}
+.pull-quote p {
+  font-size: 18px; font-weight: 500; color: var(--fg);
+  line-height: 1.5; margin-bottom: 12px; font-style: italic;
+}
+.pull-quote .share-row { display: flex; gap: 8px; }
+.pull-quote .share-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--muted); font-size: 12px;
+  font-family: 'Space Grotesk', sans-serif; cursor: pointer;
+  text-decoration: none; transition: border-color 0.2s, color 0.2s;
+}
+.pull-quote .share-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pull-quote .share-btn svg { width: 14px; height: 14px; }
+
+/* Pattern card */
+.pattern-card {
+  margin: 48px 0; padding: 28px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--border);
+  position: sticky; top: calc(var(--topbar-h) + 16px); z-index: 10;
+}
+.pattern-card h3 {
+  font-family: 'Space Grotesk', sans-serif; font-size: 14px;
+  color: var(--accent); text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+}
+.pattern-card h3 svg { width: 18px; height: 18px; stroke: var(--accent); }
+.pattern-card .field { margin-bottom: 14px; }
+.pattern-card .field-label {
+  font-family: 'Space Grotesk', sans-serif; font-size: 11px;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.pattern-card .field-value { font-size: 14px; color: var(--fg-dim); line-height: 1.5; }
+
+/* Forces widget */
+.forces-widget {
+  margin: 48px 0; padding: 32px; border-radius: 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+}
+.forces-widget h3 {
+  font-family: 'Space Grotesk', sans-serif; font-size: 14px;
+  color: var(--accent); text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 24px;
+}
+.pipeline-viz {
+  display: flex; align-items: center; justify-content: center; gap: 0;
+  margin-bottom: 24px; flex-wrap: wrap;
+}
+.pipe-step {
+  width: 100px; height: 64px; border-radius: 8px;
+  background: var(--card); border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Space Grotesk', sans-serif; font-size: 12px;
+  color: var(--fg-dim); transition: all 0.5s; position: relative;
+}
+.pipe-step.degrading { border-color: var(--danger); background: rgba(196,69,54,0.1); }
+.pipe-step.degraded { border-color: var(--danger); background: rgba(196,69,54,0.2); color: var(--danger); }
+.pipe-step.stubbed { border-color: var(--accent); background: rgba(212,135,63,0.1); color: var(--accent); }
+.pipe-step.ok { border-color: var(--accent2); background: rgba(42,157,143,0.1); color: var(--accent2); }
+.pipe-arrow {
+  width: 32px; height: 2px; background: var(--border); position: relative;
+  transition: background 0.5s;
+}
+.pipe-arrow::after {
+  content: ''; position: absolute; right: 0; top: -4px;
+  border: 5px solid transparent; border-left-color: var(--border);
+  transition: border-left-color 0.5s;
+}
+.pipe-arrow.broken { background: var(--danger); }
+.pipe-arrow.broken::after { border-left-color: var(--danger); }
+.context-bar-wrap {
+  margin-bottom: 24px; padding: 0 8px;
+}
+.context-bar-label {
+  font-family: 'Space Grotesk', sans-serif; font-size: 11px;
+  color: var(--muted); margin-bottom: 6px; display: flex;
+  justify-content: space-between;
+}
+.context-bar {
+  height: 12px; border-radius: 6px; background: var(--card);
+  border: 1px solid var(--border); overflow: hidden;
+}
+.context-bar-fill {
+  height: 100%; border-radius: 6px; transition: width 0.8s, background 0.5s;
+  background: var(--accent2);
+}
+.context-bar-fill.warning { background: var(--accent); }
+.context-bar-fill.critical { background: var(--danger); }
+.forces-controls {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin-bottom: 20px;
+}
+.force-toggle {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--card); cursor: pointer; transition: border-color 0.2s;
+  user-select: none;
+}
+.force-toggle:hover { border-color: var(--muted); }
+.force-toggle.active { border-color: var(--accent); }
+.force-toggle .toggle-track {
+  width: 36px; height: 20px; border-radius: 10px;
+  background: var(--border); position: relative; flex-shrink: 0;
+  transition: background 0.2s;
+}
+.force-toggle.active .toggle-track { background: var(--accent); }
+.force-toggle .toggle-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--fg); position: absolute; top: 2px; left: 2px;
+  transition: transform 0.2s;
+}
+.force-toggle.active .toggle-thumb { transform: translateX(16px); }
+.force-toggle .force-label {
+  font-family: 'Space Grotesk', sans-serif; font-size: 12px; color: var(--fg-dim);
+}
+.pattern-toggle {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 14px; border-radius: 8px; border: 2px solid var(--border);
+  background: transparent; cursor: pointer; width: 100%;
+  font-family: 'Space Grotesk', sans-serif; font-size: 14px;
+  color: var(--fg-dim); transition: all 0.3s; user-select: none;
+}
+.pattern-toggle.active {
+  border-color: var(--accent2); color: var(--accent2);
+  background: rgba(42,157,143,0.08);
+}
+.forces-status {
+  text-align: center; font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px; color: var(--muted); min-height: 20px;
+  transition: color 0.3s;
+}
+.forces-status.bad { color: var(--danger); }
+.forces-status.good { color: var(--accent2); }
+
+/* Architecture diagram */
+.arch-diagram {
+  margin: 48px 0; padding: 32px; border-radius: 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+  overflow-x: auto;
+}
+.arch-diagram svg text { font-family: 'Space Grotesk', sans-serif; }
+.arch-diagram .arch-box { cursor: pointer; transition: opacity 0.2s; }
+.arch-diagram .arch-box:hover { opacity: 0.85; }
+.arch-diagram .arch-anno {
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+.arch-diagram .arch-box:hover + .arch-anno,
+.arch-diagram .arch-box:focus + .arch-anno { opacity: 1; }
+
+/* Data chart */
+.data-chart {
+  margin: 48px 0; padding: 32px; border-radius: 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+}
+.data-chart h3 {
+  font-family: 'Space Grotesk', sans-serif; font-size: 14px;
+  color: var(--accent); text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 24px;
+}
+.chart-bars { display: flex; flex-direction: column; gap: 20px; }
+.chart-group { display: flex; flex-direction: column; gap: 6px; }
+.chart-group-label {
+  font-family: 'Space Grotesk', sans-serif; font-size: 12px; color: var(--muted);
+}
+.chart-row { display: flex; align-items: center; gap: 12px; }
+.chart-bar-wrap { flex: 1; height: 28px; background: var(--card); border-radius: 4px; overflow: hidden; }
+.chart-bar {
+  height: 100%; border-radius: 4px; width: 0; transition: width 1.2s ease-out;
+}
+.chart-bar.naive { background: var(--danger); }
+.chart-bar.bounded { background: var(--accent2); }
+.chart-bar-label {
+  font-family: 'Space Grotesk', sans-serif; font-size: 11px; color: var(--fg-dim);
+  min-width: 80px;
+}
+.chart-legend {
+  display: flex; gap: 20px; margin-top: 20px; justify-content: center;
+}
+.chart-legend-item {
+  display: flex; align-items: center; gap: 6px;
+  font-family: 'Space Grotesk', sans-serif; font-size: 12px; color: var(--muted);
+}
+.chart-legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+/* Comparison table */
+.comp-table-wrap {
+  margin: 48px 0; padding: 32px; border-radius: 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+  overflow-x: auto;
+}
+.comp-table {
+  width: 100%; border-collapse: collapse;
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px;
+}
+.comp-table th {
+  text-align: left; padding: 12px 14px; border-bottom: 2px solid var(--border);
+  color: var(--muted); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.5px; cursor: pointer; user-select: none;
+  white-space: nowrap; transition: color 0.2s;
+}
+.comp-table th:hover { color: var(--accent); }
+.comp-table th .sort-arrow { margin-left: 4px; font-size: 10px; opacity: 0.4; }
+.comp-table th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+.comp-table td {
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  color: var(--fg-dim); vertical-align: top;
+}
+.comp-table tr { transition: background 0.15s; }
+.comp-table tbody tr:hover { background: rgba(212,135,63,0.04); }
+.comp-table .dim { color: var(--danger); }
+.comp-table .good { color: var(--accent2); }
+
+/* Retrieval cards */
+.retrieval-cards { margin: 48px 0; display: flex; flex-direction: column; gap: 16px; }
+.retrieval-card {
+  padding: 20px 24px; border-radius: 10px; background: var(--card);
+  border: 1px solid var(--border);
+}
+.retrieval-card .q {
+  font-family: 'Space Grotesk', sans-serif; font-size: 14px;
+  color: var(--fg); margin-bottom: 12px; font-weight: 500;
+}
+.retrieval-card .reveal-btn {
+  padding: 6px 16px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--muted); font-size: 12px;
+  font-family: 'Space Grotesk', sans-serif; cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.retrieval-card .reveal-btn:hover { border-color: var(--accent); color: var(--accent); }
+.retrieval-card .answer {
+  margin-top: 12px; font-size: 14px; color: var(--fg-dim);
+  display: none; line-height: 1.6;
+}
+.retrieval-card .answer.show { display: block; }
+
+/* Concept map */
+.concept-map {
+  margin: 48px 0; padding: 32px; border-radius: 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+  overflow: visible;
+}
+.concept-map svg text { font-family: 'Space Grotesk', sans-serif; }
+
+/* Checklist */
+.checklist { margin: 24px 0; padding-left: 0; list-style: none; }
+.checklist li {
+  padding: 10px 0 10px 28px; position: relative; color: var(--fg-dim);
+  border-bottom: 1px solid var(--border); font-size: 15px;
+}
+.checklist li::before {
+  content: ''; position: absolute; left: 0; top: 16px;
+  width: 14px; height: 14px; border-radius: 3px;
+  border: 2px solid var(--border);
+}
+
+/* CTA */
+.cta-block {
+  margin: 48px 0; padding: 32px; border-radius: 12px;
+  border: 2px solid var(--accent); background: rgba(212,135,63,0.06);
+}
+.cta-block h2 {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+  font-size: 20px; color: var(--accent); margin-bottom: 12px;
+}
+.cta-block p { color: var(--fg-dim); margin-bottom: 0; }
+
+/* Figcaption */
+figcaption {
+  font-family: 'Space Grotesk', sans-serif; font-size: 12px;
+  color: var(--muted); margin-top: 12px; font-style: italic;
+  text-align: center;
+}
+
+/* Icon markers */
+.icon-forces { display: inline-flex; align-items: center; gap: 4px; }
+.icon-forces svg { width: 14px; height: 14px; stroke: var(--accent); vertical-align: middle; }
+.icon-cite { display: inline-flex; align-items: center; gap: 4px; }
+.icon-cite svg { width: 12px; height: 12px; stroke: var(--muted); vertical-align: middle; }
+.icon-counter { display: inline-flex; align-items: center; gap: 4px; }
+.icon-counter svg { width: 14px; height: 14px; stroke: var(--danger); vertical-align: middle; }
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--border); padding: 40px;
+  max-width: 780px; margin: 0 auto;
+}
+footer h4 {
+  font-family: 'Space Grotesk', sans-serif; font-size: 12px;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+footer .cite-list {
+  font-size: 13px; color: var(--fg-dim); line-height: 1.8;
+  list-style: none; padding: 0;
+}
+footer .cite-list li { margin-bottom: 4px; }
+footer .top-link {
+  display: inline-block; margin-top: 24px; color: var(--accent);
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px;
+  text-decoration: none; transition: opacity 0.2s;
+}
+footer .top-link:hover { opacity: 0.7; }
+
+/* Off-canvas drawer */
+#drawer-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  z-index: 999;
+}
+#drawer {
+  position: fixed; top: 0; left: -280px; width: 280px; height: 100vh;
+  background: var(--bg2); border-right: 1px solid var(--border);
+  padding: 72px 20px 20px; z-index: 1000; transition: left 0.3s;
+  overflow-y: auto;
+}
+#drawer.open { left: 0; }
+#drawer-overlay.open { display: block; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .beat-reveal.not-visible .before,
+  .beat-reveal.not-visible .after,
+  .beat-reveal.not-visible .turn { opacity: 1; transform: none; }
+  .chart-bar { transition: none; }
+}
+
+/* Responsive */
+@media (max-width: 880px) {
+  .layout { grid-template-columns: 1fr; }
+  #rail { display: none; }
+  #hamburger { display: block; }
+  main { padding: 32px 20px 60px; }
+  .spectrum { grid-template-columns: 1fr; gap: 12px; }
+  .spectrum .naive { text-align: left; }
+  .spectrum .divider { width: 60px; height: 2px; justify-self: start; }
+  .forces-controls { grid-template-columns: 1fr; }
+  .pipeline-viz { gap: 4px; }
+  .pipe-step { width: 70px; height: 48px; font-size: 10px; }
+  .pipe-arrow { width: 16px; }
+  .pattern-card { position: static; }
+  .pull-quote p { font-size: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<header id="topbar">
+  <a href="https://iggym.github.io/production-ai-patterns/" class="home-link">production-ai-patterns</a>
+  <span class="breadcrumb">patterns / <span>reliability</span></span>
+  <span class="reading-time">6 min read</span>
+  <button id="hamburger" aria-label="Open menu">
+    <svg width="24" height="24" fill="none" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+</header>
+
+<div id="drawer-overlay"></div>
+<nav id="drawer">
+  <h3>Insights Unlocked</h3>
+  <div class="things-item" id="d-thing-0">
+    <span class="lock"><svg class="locked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg><svg class="unlocked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg></span>
+    <span>Retrying a failed step inflates context, making the next attempt harder</span>
+  </div>
+  <div class="things-item" id="d-thing-1">
+    <span class="lock"><svg class="locked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg><svg class="unlocked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg></span>
+    <span>Rate-limit resets and breaker cooldowns run on different clocks</span>
+  </div>
+  <div class="things-item" id="d-thing-2">
+    <span class="lock"><svg class="locked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg><svg class="unlocked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg></span>
+    <span>Dropping a partial stream destroys agent state you can't reconstruct</span>
+  </div>
+  <div class="rail-nav">
+    <a href="#forces-section">Forces Diagram</a>
+    <a href="#pattern-card-section">Pattern Card</a>
+    <a href="#arch-section">Architecture</a>
+    <a href="#data-section">The Cost</a>
+    <a href="#table-section">Comparison</a>
+    <a href="#retrieval-section">Recall Check</a>
+    <a href="#concept-section">Related Patterns</a>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside id="rail">
+    <h3>Insights Unlocked</h3>
+    <div class="things-item" id="thing-0">
+      <span class="lock"><svg class="locked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg><svg class="unlocked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg></span>
+      <span>Retrying a failed step inflates context, making the next attempt harder</span>
+    </div>
+    <div class="things-item" id="thing-1">
+      <span class="lock"><svg class="locked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg><svg class="unlocked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg></span>
+      <span>Rate-limit resets and breaker cooldowns run on different clocks</span>
+    </div>
+    <div class="things-item" id="thing-2">
+      <span class="lock"><svg class="locked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg><svg class="unlocked-icon" viewBox="0 0 16 16" fill="none" stroke-width="1.5"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V4.5a3 3 0 0 1 6 0V7"/></svg></span>
+      <span>Dropping a partial stream destroys agent state you can't reconstruct</span>
+    </div>
+    <div class="rail-nav">
+      <a href="#forces-section">Forces Diagram</a>
+      <a href="#pattern-card-section">Pattern Card</a>
+      <a href="#arch-section">Architecture</a>
+      <a href="#data-section">The Cost</a>
+      <a href="#table-section">Comparison</a>
+      <a href="#retrieval-section">Recall Check</a>
+      <a href="#concept-section">Related Patterns</a>
+    </div>
+  </aside>
+
+  <main>
+    <section class="hero">
+      <h1>Stop Retrying Your Agents</h1>
+      <div class="meta">
+        <span>2025-03-18</span>
+        <span>Reliability</span>
+        <span>6 min</span>
+      </div>
+    </section>
+
+    <div class="spectrum">
+      <div class="naive">"Just add retries — that's what we always do."</div>
+      <div class="divider"></div>
+      <div class="bold">Each retry inflates context, burns tokens, and lowers success probability.</div>
+    </div>
+
+    <article class="article-body">
+      <p>In February 2025, an agent pipeline at a mid-stage startup started failing silently. Not crashing — failing silently. Each time a tool-calling step errored out, the orchestrator retried it, appending the error message to the conversation context. After three retries on a single step, the context had grown by roughly 40%, pushing the agent's remaining reasoning into a truncated window where it produced plausible-looking but factually empty output. No error was thrown. No alert fired. The system kept running, delivering worse answers with full confidence. The on-call engineer didn't find out until a customer flagged the degradation — two days later.</p>
+
+      <div class="beat-reveal not-visible" id="beat1">
+        <span class="before">BEFORE: "Retries make systems more reliable."</span>
+        <span class="after">AFTER: "Retries on LLM agent steps amplify failure."</span>
+        <span class="turn">The turn: your most trusted reliability tool is the mechanism destroying your pipeline.</span>
+      </div>
+
+      <h2>The Real Failure Mode</h2>
+      <p>Standard reliability playbooks assume each retry is independent: same inputs, same expected output, same cost. An LLM agent step violates all three. Each retry carries a larger context. The model's output is non-deterministic, so the same prompt can produce a different failure. And each attempt burns tokens — real money — for a progressively lower probability of success. The retry doesn't recover the step. It starves every step that follows.</p>
+
+      <h2>The Pattern</h2>
+      <p><span class="pattern-name">Bounded Cascade Degradation</span>A retry and timeout pattern for multi-step LLM agent pipelines that treats context growth as a first-class failure signal, caps retry-induced context expansion at a defined budget, and degrades the pipeline by skipping or stubbing failed steps rather than re-attempting them with expanded context.</p>
+
+      <h2>What Fights Back</h2>
+      <p><span class="icon-forces"><svg viewBox="0 0 14 14" fill="none" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M7 2v10M2 7h10"/></svg></span> Four forces push against this. Latency budgets demand fast resolution, making "just retry it" the path of least resistance. Cost governance wants you to stop spending but has no mechanism to see the spending that retry context-inflation causes. The context window is a fixed ceiling — once burned on retries, it's gone. And the expectation of correctness makes engineers unwilling to skip a step, even when retrying it is demonstrably making the overall pipeline worse.</p>
+
+      <div id="forces-section"></div>
+
+      <h2>Bounded Cascade Degradation</h2>
+      <p>Three concrete rules. First, define a <strong>retry context budget</strong> — a hard cap on how many tokens a single step's retry attempts may add to the conversation. Exhausted means degraded, not retried again. Second, implement <strong>step stubbing</strong> — a degraded step returns a structured placeholder that downstream steps can reason about without the cost of a full re-attempt. Third, set a <strong>cascade ceiling</strong> — if more than N steps degrade, halt the pipeline and return a partial result with a degradation manifest.</p>
+      <p><span class="icon-cite"><svg viewBox="0 0 12 12" fill="none" stroke-width="1.2"><path d="M2 3h8M2 6h6M2 9h7"/></svg></span> Portkey's AI Gateway implements a version of this at the single-call level: their gateway tracks per-request token consumption and routes to a fallback provider rather than retrying the same provider with an inflated prompt. The fallback preserves the original context size. Vercel's AI SDK takes a complementary angle: when a streaming response fails partway through, their retry logic preserves the partial response as context for the retry attempt, preventing the silent state loss that standard HTTP retries would cause.</p>
+
+      <h2>What You Trade Away</h2>
+      <p>Bounded Cascade Degradation means accepting partial results. Your pipeline will sometimes return answers with visible gaps instead of confident wrong answers. That's the point. But it also means building downstream logic that can handle those placeholders — engineering work you wouldn't need if retries just worked. And it means defining your retry context budget and cascade ceiling up front, which requires understanding your pipeline's context economics in a way most teams haven't instrumented yet.</p>
+      <p>The same context-inflation dynamic that destroys agent pipelines on retry is the reason prompt-chaining architectures outperform monolithic agents on long tasks — not because chaining is fundamentally smarter, but because it resets the context bomb at each boundary.</p>
+
+      <h2>The Evidence</h2>
+      <p><span class="icon-cite"><svg viewBox="0 0 12 12" fill="none" stroke-width="1.2"><path d="M2 3h8M2 6h6M2 9h7"/></svg></span> Portkey's published gateway architecture documents their rate-limit-aware retry logic: rather than standard exponential backoff, the gateway reads the <code>Retry-After</code> header from 429 responses and aligns its retry window to the provider's reset clock. Without this, a 30-second backoff against a 10-second rate-limit window wastes the entire reset period — each wasted attempt carrying the full prompt cost. The LangChain community documented the context-growth failure mode across multiple GitHub issues in early 2025, showing that a three-retry loop on a failed tool call could consume 30–40% of a 128k context window in error-recovery text alone. This is roughly the same class of failure that killed early microservice retry storms around 2015 — except those at least returned HTTP 500s. Vercel's AI SDK team described their streaming retry approach as a response to the partial-response problem — dropping a failed stream and retrying from scratch loses intermediate reasoning that downstream agent steps depend on.</p>
+
+      <h2>But What If...</h2>
+      <p><span class="icon-counter"><svg viewBox="0 0 14 14" fill="none" stroke-width="1.5"><path d="M7 1v12M1 7h12"/><circle cx="7" cy="7" r="6"/></svg></span> The strongest counterargument: what if the failure is transient — a momentary rate limit or network blip — and a single clean retry would have fixed it? Bounded Cascade Degradation might skip a step that would have succeeded on attempt two. The answer: the pattern doesn't prohibit retries. It budgets them. A transient failure consumes one retry's worth of context budget and succeeds. A systematic failure — the far more common case in LLM pipelines, where the failure is caused by prompt content, not infrastructure — hits the budget and degrades gracefully instead of silently corrupting the pipeline.</p>
+
+      <div class="beat-reveal not-visible" id="beat2">
+        <span class="before">BEFORE: "A partial result is worse than a wrong result — at least the wrong result looks complete."</span>
+        <span class="after">AFTER: "A partial result with a degradation manifest is the only result type that tells the truth about what happened."</span>
+        <span class="turn">The turn: the "complete" output you've been serving was never complete — it was just missing its failure annotations.</span>
+      </div>
+
+      <h2>The Checklist</h2>
+      <ul class="checklist">
+        <li>Does your agent orchestrator track context growth per retry attempt, or only per step?</li>
+        <li>When a step fails after exhausting retries, does it return a structured degradation signal or a raw error string?</li>
+        <li>Can downstream steps reason about a degraded predecessor, or do they assume all prior steps succeeded?</li>
+        <li>Does your retry logic account for provider rate-limit reset windows, or does it use generic exponential backoff?</li>
+        <li>If three consecutive steps in a ten-step pipeline degrade, does your system halt or keep producing?</li>
+      </ul>
+
+      <div class="cta-block">
+        <h2>Do This Tomorrow</h2>
+        <p>Pick one agent pipeline in production. Add a log line that prints the token count of the context before and after each retry attempt. Run it for a day. You'll see the number.</p>
+      </div>
+    </article>
+
+    <!-- Pull quotes -->
+    <div class="pull-quote" id="pq1">
+      <p>"Each retry carries a larger context. The model's output is non-deterministic, so the same prompt can produce a different failure. And each attempt burns tokens — real money — for a progressively lower probability of success."</p>
+      <div class="share-row">
+        <a class="share-btn" id="pq1-x" href="#" target="_blank" rel="noopener">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2.5L6.5 8M12 2.5L8 12l-1.5-4L3 6.5z"/></svg>
+          Share on X
+        </a>
+        <a class="share-btn" id="pq1-li" href="#" target="_blank" rel="noopener">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="12" height="12" rx="2"/><path d="M4 7h6M7 4v6"/></svg>
+          Share on LinkedIn
+        </a>
+      </div>
+    </div>
+
+    <div class="pull-quote" id="pq2">
+      <p>"Your pipeline will sometimes return answers with visible gaps instead of confident wrong answers. That's the point."</p>
+      <div class="share-row">
+        <a class="share-btn" id="pq2-x" href="#" target="_blank" rel="noopener">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2.5L6.5 8M12 2.5L8 12l-1.5-4L3 6.5z"/></svg>
+          Share on X
+        </a>
+        <a class="share-btn" id="pq2-li" href="#" target="_blank" rel="noopener">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="12" height="12" rx="2"/><path d="M4 7h6M7 4v6"/></svg>
+          Share on LinkedIn
+        </a>
+      </div>
+    </div>
+
+    <div class="pull-quote" id="pq3">
+      <p>"A partial result with a degradation manifest is the only result type that tells the truth about what happened."</p>
+      <div class="share-row">
+        <a class="share-btn" id="pq3-x" href="#" target="_blank" rel="noopener">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2.5L6.5 8M12 2.5L8 12l-1.5-4L3 6.5z"/></svg>
+          Share on X
+        </a>
+        <a class="share-btn" id="pq3-li" href="#" target="_blank" rel="noopener">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="12" height="12" rx="2"/><path d="M4 7h6M7 4v6"/></svg>
+          Share on LinkedIn
+        </a>
+      </div>
+    </div>
+
+    <!-- Forces widget -->
+    <div class="forces-widget" id="forces-widget">
+      <h3>Forces Diagram</h3>
+      <div class="context-bar-wrap">
+        <div class="context-bar-label">
+          <span>Context Budget</span>
+          <span id="ctx-pct">100%</span>
+        </div>
+        <div class="context-bar">
+          <div class="context-bar-fill" id="ctx-fill" style="width:100%"></div>
+        </div>
+      </div>
+      <div class="pipeline-viz" id="pipeline">
+        <div class="pipe-step" id="ps0">Step 1</div>
+        <div class="pipe-arrow" id="pa0"></div>
+        <div class="pipe-step" id="ps1">Step 2</div>
+        <div class="pipe-arrow" id="pa1"></div>
+        <div class="pipe-step" id="ps2">Step 3</div>
+        <div class="pipe-arrow" id="pa2"></div>
+        <div class="pipe-step" id="ps3">Step 4</div>
+      </div>
+      <div class="forces-controls">
+        <div class="force-toggle" data-force="retry" onclick="toggleForce(this)">
+          <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          <span class="force-label">Retry Overhead</span>
+        </div>
+        <div class="force-toggle" data-force="context" onclick="toggleForce(this)">
+          <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          <span class="force-label">Context Budget</span>
+        </div>
+        <div class="force-toggle" data-force="latency" onclick="toggleForce(this)">
+          <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          <span class="force-label">Latency Ceiling</span>
+        </div>
+        <div class="force-toggle" data-force="cost" onclick="toggleForce(this)">
+          <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          <span class="force-label">Cost Cap</span>
+        </div>
+      </div>
+      <button class="pattern-toggle" id="pattern-btn" onclick="togglePattern()">Apply Bounded Cascade Degradation</button>
+      <div class="forces-status" id="forces-status">Toggle forces to see how the pipeline responds.</div>
+      <figcaption>Where the Tightrope Snaps Before You Notice It's Even There</figcaption>
+    </div>
+
+    <!-- Pattern card -->
+    <div class="pattern-card" id="pattern-card-section">
+      <h3>
+        <svg viewBox="0 0 18 18" fill="none" stroke-width="1.5"><rect x="2" y="2" width="14" height="14" rx="3"/><path d="M6 7h6M6 11h4"/></svg>
+        Pattern Card
+      </h3>
+      <div class="field">
+        <div class="field-label">Problem</div>
+        <div class="field-value">Retrying failed LLM agent steps inflates context with each attempt, silently degrading all downstream steps until output becomes plausible but empty.</div>
+      </div>
+      <div class="field">
+        <div class="field-label">Forces</div>
+        <div class="field-value">Latency pressure to resolve fast. Cost governance blind to retry-inflation cost. Fixed context ceiling. Correctness expectation that resists partial results.</div>
+      </div>
+      <div class="field">
+        <div class="field-label">Solution</div>
+        <div class="field-value">Cap context growth per step (retry context budget). Replace failed steps with structured stubs (step stubbing). Halt pipeline when degradation exceeds a threshold (cascade ceiling).</div>
+      </div>
+      <div class="field">
+        <div class="field-label">Consequences</div>
+        <div class="field-value">Partial results replace silent corruption. Requires downstream stub-handling logic. Forces upfront context economics instrumentation. Trade: visible gaps for honest output.</div>
+      </div>
+    </div>
+
+    <!-- Architecture diagram -->
+    <div class="arch-diagram" id="arch-section">
+      <svg viewBox="0 0 520 340" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <!-- App layer -->
+        <g class="arch-box" tabindex="0">
+          <rect x="160" y="10" width="200" height="48" rx="6" fill="#1A1816" stroke="#2D2926" stroke-width="1.5"/>
+          <text x="260" y="40" text-anchor="middle" fill="#E8E0D4" font-size="13" font-weight="500">Agent Orchestrator</text>
+        </g>
+        <text x="260" y="74" text-anchor="middle" fill="#7A746D" font-size="10" font-style="italic">Appends error to context on failure — this is the problem</text>
+
+        <!-- Arrow -->
+        <line x1="260" y1="84" x2="260" y2="108" stroke="#2D2926" stroke-width="1.5"/>
+        <polygon points="254,106 260,116 266,106" fill="#2D2926"/>
+
+        <!-- Gateway -->
+        <g class="arch-box" tabindex="0">
+          <rect x="80" y="116" width="360" height="120" rx="8" fill="#1A1816" stroke="#D4873F" stroke-width="1.5"/>
+          <text x="260" y="140" text-anchor="middle" fill="#D4873F" font-size="12" font-weight="600">Portkey AI Gateway</text>
+        </g>
+        <!-- Gateway sub-boxes -->
+        <g class="arch-box" tabindex="0">
+          <rect x="100" y="152" width="100" height="36" rx="4" fill="#0C0B09" stroke="#2D2926" stroke-width="1"/>
+          <text x="150" y="175" text-anchor="middle" fill="#B5ADA3" font-size="11">Rate Limit Tracker</text>
+        </g>
+        <g class="arch-box" tabindex="0">
+          <rect x="210" y="152" width="100" height="36" rx="4" fill="#0C0B09" stroke="#2D2926" stroke-width="1"/>
+          <text x="260" y="175" text-anchor="middle" fill="#B5ADA3" font-size="11">Retry Logic</text>
+        </g>
+        <g class="arch-box" tabindex="0">
+          <rect x="320" y="152" width="100" height="36" rx="4" fill="#0C0B09" stroke="#2D2926" stroke-width="1"/>
+          <text x="370" y="175" text-anchor="middle" fill="#B5ADA3" font-size="11">Fallback Router</text>
+        </g>
+        <text x="260" y="218" text-anchor="middle" fill="#7A746D" font-size="10" font-style="italic">Reads Retry-After header — aligns to provider's clock, not generic backoff</text>
+
+        <!-- Arrows to providers -->
+        <line x1="180" y1="236" x2="150" y2="262" stroke="#2D2926" stroke-width="1.5"/>
+        <polygon points="144,258 148,268 156,260" fill="#2D2926"/>
+        <line x1="340" y1="236" x2="370" y2="262" stroke="#2D2926" stroke-width="1.5"/>
+        <polygon points="364,258 372,268 376,258" fill="#2D2926"/>
+
+        <!-- Provider A -->
+        <g class="arch-box" tabindex="0">
+          <rect x="60" y="268" width="180" height="48" rx="6" fill="#1A1816" stroke="#2A9D8F" stroke-width="1.5"/>
+          <text x="150" y="297" text-anchor="middle" fill="#2A9D8F" font-size="13" font-weight="500">OpenAI API (GPT-4o)</text>
+        </g>
+
+        <!-- Provider B -->
+        <g class="arch-box" tabindex="0">
+          <rect x="280" y="268" width="180" height="48" rx="6" fill="#1A1816" stroke="#2A9D8F" stroke-width="1.5"/>
+          <text x="370" y="297" text-anchor="middle" fill="#2A9D8F" font-size="13" font-weight="500">Anthropic API (Claude)</text>
+        </g>
+
+        <!-- Fallback arrow -->
+        <path d="M240 288 Q 260 320 340 288" fill="none" stroke="#D4873F" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="260" y="330" text-anchor="middle" fill="#D4873F" font-size="9" font-style="italic">fallback preserves original context size</text>
+      </svg>
+      <figcaption>Where the Retry Happens Matters More Than Whether It Happens</figcaption>
+    </div>
+
+    <!-- Data chart -->
+    <div class="data-chart" id="data-section">
+      <h3>The Cost of Naive Retries</h3>
+      <div class="chart-bars" id="chart-bars">
+        <div class="chart-group">
+          <div class="chart-group-label">Context Waste per Failed Step</div>
+          <div class="chart-row">
+            <span class="chart-bar-label">Naive Retry</span>
+            <div class="chart-bar-wrap"><div class="chart-bar naive" data-width="85"></div></div>
+          </div>
+          <div class="chart-row">
+            <span class="chart-bar-label">Bounded Cascade</span>
+            <div class="chart-bar-wrap"><div class="chart-bar bounded" data-width="20"></div></div>
+          </div>
+        </div>
+        <div class="chart-group">
+          <div class="chart-group-label">Cost Multiplier per Pipeline Run</div>
+          <div class="chart-row">
+            <span class="chart-bar-label">Naive Retry</span>
+            <div class="chart-bar-wrap"><div class="chart-bar naive" data-width="72"></div></div>
+          </div>
+          <div class="chart-row">
+            <span class="chart-bar-label">Bounded Cascade</span>
+            <div class="chart-bar-wrap"><div class="chart-bar bounded" data-width="30"></div></div>
+          </div>
+        </div>
+        <div class="chart-group">
+          <div class="chart-group-label">Degradation Visibility</div>
+          <div class="chart-row">
+            <span class="chart-bar-label">Naive Retry</span>
+            <div class="chart-bar-wrap"><div class="chart-bar naive" data-width="5"></div></div>
+          </div>
+          <div class="chart-row">
+            <span class="chart-bar-label">Bounded Cascade</span>
+            <div class="chart-bar-wrap"><div class="chart-bar bounded" data-width="95"></div></div>
+          </div>
+        </div>
+        <div class="chart-group">
+          <div class="chart-group-label">Pipeline Success Rate (after failure)</div>
+          <div class="chart-row">
+            <span class="chart-bar-label">Naive Retry</span>
+            <div class="chart-bar-wrap"><div class="chart-bar naive" data-width="35"></div></div>
+          </div>
+          <div class="chart-row">
+            <span class="chart-bar-label">Bounded Cascade</span>
+            <div class="chart-bar-wrap"><div class="chart-bar bounded" data-width="78"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-legend">
+        <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--danger)"></div>Naive Retry (3 attempts, unbounded)</div>
+        <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--accent2)"></div>Bounded Cascade (budgeted, stubbed)</div>
+      </div>
+      <figcaption>What You Spend When You Assume Retries Are Free</figcaption>
+    </div>
+
+    <!-- Comparison table -->
+    <div class="comp-table-wrap" id="table-section">
+      <table class="comp-table" id="comp-table">
+        <thead>
+          <tr>
+            <th data-col="0" data-type="str">Dimension <span class="sort-arrow">&#9650;</span></th>
+            <th data-col="1" data-type="str">Standard HTTP Retry <span class="sort-arrow">&#9650;</span></th>
+            <th data-col="2" data-type="str">Naive LLM Retry <span class="sort-arrow">&#9650;</span></th>
+            <th data-col="3" data-type="str">Bounded Cascade <span class="sort-arrow">&#9650;</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Error Detection</td>
+            <td>HTTP status codes</td>
+            <td>Status + content filter</td>
+            <td class="good">Status + context budget + cascade count</td>
+          </tr>
+          <tr>
+            <td>Retry Trigger</td>
+            <td>5xx, timeout</td>
+            <td>5xx, timeout, content filter</td>
+            <td>Same, bounded by context budget</td>
+          </tr>
+          <tr>
+            <td>Context Growth</td>
+            <td>None (stateless)</td>
+            <td class="dim">Unbounded per retry</td>
+            <td class="good">Capped at defined budget</td>
+          </tr>
+          <tr>
+            <td>Partial State</td>
+            <td>Dropped on retry</td>
+            <td class="dim">Dropped on retry</td>
+            <td class="good">Preserved in degradation manifest</td>
+          </tr>
+          <tr>
+            <td>Degradation Signal</td>
+            <td>Error response</td>
+            <td class="dim">Silent truncation</td>
+            <td class="good">Explicit degradation manifest</td>
+          </tr>
+          <tr>
+            <td>Cost per Failure</td>
+            <td>Fixed (1 retry cost)</td>
+            <td class="dim">Multiplicative (growing context)</td>
+            <td class="good">Bounded (budget ceiling)</td>
+          </tr>
+        </tbody>
+      </table>
+      <figcaption>Three Ways to Fail, Only One That Admits It</figcaption>
+    </div>
+
+    <!-- Retrieval practice cards -->
+    <div class="retrieval-cards" id="retrieval-section">
+      <div class="retrieval-card">
+        <div class="q">An agent step fails on a tool call. You retry three times, each time appending the error to context. What happens to the remaining steps?</div>
+        <button class="reveal-btn" onclick="toggleAnswer(this)">Reveal Answer</button>
+        <div class="answer">Each retry inflates the context, leaving less room for subsequent steps. After three retries, 30–40% of a 128k window may be consumed by error-recovery text alone, causing later steps to produce truncated or empty reasoning — with no error thrown.</div>
+      </div>
+      <div class="retrieval-card">
+        <div class="q">Your circuit breaker uses a 30-second cooldown, but the LLM provider's rate limit resets in 10 seconds. What goes wrong?</div>
+        <button class="reveal-btn" onclick="toggleAnswer(this)">Reveal Answer</button>
+        <div class="answer">The breaker stays open for 20 seconds after the rate limit has already reset, wasting the entire recovery window. Each retry attempt during the open state still carries the full prompt cost. The fix: read the provider's Retry-After header and align the breaker's cooldown to the provider's clock.</div>
+      </div>
+      <div class="retrieval-card">
+        <div class="q">A streaming LLM response fails at 60% completion. You retry from the original prompt. Why might downstream agent steps now fail?</div>
+        <button class="reveal-btn" onclick="toggleAnswer(this)">Reveal Answer</button>
+        <div class="answer">The partial response contained intermediate reasoning that downstream steps depend on. Dropping it and retrying from scratch creates a hidden state mismatch: the pipeline "knows" about intermediate results that the model hasn't actually produced. The fix: preserve partial tokens as context for the retry, as Vercel's AI SDK does.</div>
+      </div>
+    </div>
+
+    <!-- Concept map -->
+    <div class="concept-map" id="concept-section">
+      <svg viewBox="0 0 540 320" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <!-- Central node -->
+        <g class="arch-box" tabindex="0">
+          <rect x="170" y="120" width="200" height="48" rx="24" fill="#1A1816" stroke="#D4873F" stroke-width="2"/>
+          <text x="270" y="149" text-anchor="middle" fill="#D4873F" font-size="12" font-weight="600">Bounded Cascade Degradation</text>
+        </g>
+        <!-- Node: Context Window Mgmt -->
+        <g class="arch-box" tabindex="0">
+          <rect x="20" y="20" width="140" height="40" rx="6" fill="#1A1816" stroke="#2D2926" stroke-width="1"/>
+          <text x="90" y="45" text-anchor="middle" fill="#B5ADA3" font-size="11">Context Window Mgmt</text>
+        </g>
+        <line x1="160" y1="48" x2="195" y2="120" stroke="#2D2926" stroke-width="1"/>
+        <text x="155" y="82" text-anchor="end" fill="#7A746D" font-size="9" font-style="italic">shares budget concept</text>
+
+        <!-- Node: Cost Circuit Breakers -->
+        <g class="arch-box" tabindex="0">
+          <rect x="380" y="20" width="140" height="40" rx="6" fill="#1A1816" stroke="#2D2926" stroke-width="1"/>
+          <text x="450" y="45" text-anchor="middle" fill="#B5ADA3" font-size="11">Cost Circuit Breakers</text>
+        </g>
+        <line x1="380" y1="48" x2="345" y2="120" stroke="#2D2926" stroke-width="1"/>
+        <text x="385" y="82" fill="#7A746D" font-size="9" font-style="italic">complements with</text>
+        <text x="385" y="93" fill="#7A746D" font-size="9" font-style="italic">financial bounds</text>
+
+        <!-- Node: Graceful Degradation -->
+        <g class="arch-box" tabindex="0">
+          <rect x="20" y="240" width="140" height="40" rx="6" fill="#1A1816" stroke="#2D2926" stroke-width="1"/>
+          <text x="90" y="265" text-anchor="middle" fill="#B5ADA3" font-size="11">Graceful Degradation</text>
+        </g>
+        <line x1="160" y1="252" x2="195" y2="168" stroke="#2D2926" stroke-width="1"/>
+        <text x="155" y="220" text-anchor="end" fill="#7A746D" font-size="9" font-style="italic">extends to</text>
+        <text x="155" y="231" text-anchor="end" fill="#7A746D" font-size="9" font-style="italic">multi-step pipelines</text>
+
+        <!-- Node: Step Stubbing -->
+        <g class="arch-box" tabindex="0">
+          <rect x="380" y="240" width="140" height="40" rx="6" fill="#1A1816" stroke="#2D2926" stroke-width="1"/>
+          <text x="450" y="265" text-anchor="middle" fill="#B5ADA3" font-size="11">Step Stubbing</text>
+        </g>
+        <line x1="380" y1="252" x2="345" y2="168" stroke="#2D2926" stroke-width="1"/>
+        <text x="385" y="220" fill="#7A746D" font-size="9" font-style="italic">core mechanism</text>
+
+        <!-- Node: Cascade Ceiling -->
+        <g class="arch-box" tabindex="0">
+          <rect x="210" y="280" width="120" height="36" rx="6" fill="#1A1816" stroke="#2D2926" stroke-width="1"/>
+          <text x="270" y="303" text-anchor="middle" fill="#B5ADA3" font-size="11">Cascade Ceiling</text>
+        </g>
+        <line x1="270" y1="280" x2="270" y2="168" stroke="#2D2926" stroke-width="1"/>
+        <text x="284" y="228" fill="#7A746D" font-size="9" font-style="italic">core mechanism</text>
+      </svg>
+      <figcaption>No Pattern Is an Island</figcaption>
+    </div>
+  </main>
+</div>
+
+<footer>
+  <h4>Citations</h4>
+  <ul class="cite-list">
+    <li>Portkey AI Gateway architecture documentation — retry/fallback logic, rate-limit-aligned retry windows, provider fallback routing (published through March 2025).</li>
+    <li>LangChain/LangGraph GitHub issues — agent retry context-growth failure mode, 30–40% context consumption on three-retry loops (early 2025).</li>
+    <li>Vercel AI SDK documentation — partial-state-preserving streaming retry, "the partial-response problem" (published through March 2025).</li>
+  </ul>
+  <a href="#" class="top-link" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">Back to top</a>
+  <br>
+  <a href="https://iggym.github.io/production-ai-patterns/" class="top-link" style="margin-top:8px">Home — production-ai-patterns</a>
+</footer>
+
+<script>
+(function(){
+  /* Progress bar */
+  var prog = document.getElementById('progress');
+  window.addEventListener('scroll', function(){
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    prog.style.width = h > 0 ? (window.scrollY / h * 100) + '%' : '0%';
+  });
+
+  /* Hamburger / drawer */
+  var ham = document.getElementById('hamburger');
+  var drawer = document.getElementById('drawer');
+  var overlay = document.getElementById('drawer-overlay');
+  function openDrawer(){ drawer.classList.add('open'); overlay.classList.add('open'); }
+  function closeDrawer(){ drawer.classList.remove('open'); overlay.classList.remove('open'); }
+  ham.addEventListener('click', openDrawer);
+  overlay.addEventListener('click', closeDrawer);
+  drawer.querySelectorAll('a').forEach(function(a){ a.addEventListener('click', closeDrawer); });
+
+  /* Beat reveals */
+  var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var beats = document.querySelectorAll('.beat-reveal');
+  var beatObs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        e.target.classList.remove('not-visible');
+        e.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.3 });
+  beats.forEach(function(b){ beatObs.observe(b); });
+  if(reducedMotion) beats.forEach(function(b){ b.classList.remove('not-visible'); b.classList.add('visible'); });
+
+  /* Three things unlock */
+  var things = [
+    { rail: 'thing-0', drawer: 'd-thing-0', trigger: 'beat1' },
+    { rail: 'thing-1', drawer: 'd-thing-1', trigger: null },
+    { rail: 'thing-2', drawer: 'd-thing-2', trigger: null }
+  ];
+  var unlocked = [false, false, false];
+
+  // Thing 0 unlocks at beat1
+  var thing0Obs = new IntersectionObserver(function(entries){
+    if(entries[0].isIntersecting && !unlocked[0]) unlockThing(0);
+  }, { threshold: 0.3 });
+  thing0Obs.observe(document.getElementById('beat1'));
+
+  // Thing 1 unlocks near Portkey mention — use a text node approach
+  // We'll unlock thing 1 when the Solution section's second paragraph is visible
+  var thing1Anchors = document.querySelectorAll('.article-body p');
+  var thing1Set = false;
+  var thing1Obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting && !unlocked[1] && e.target.textContent.indexOf('Portkey') !== -1 && !thing1Set){
+        thing1Set = true;
+        unlockThing(1);
+      }
+      if(e.isIntersecting && !unlocked[2] && e.target.textContent.indexOf('Vercel') !== -1){
+        unlockThing(2);
+      }
+    });
+  }, { threshold: 0.5 });
+  thing1Anchors.forEach(function(p){ thing1Obs.observe(p); });
+
+  function unlockThing(idx){
+    if(unlocked[idx]) return;
+    unlocked[idx] = true;
+    var r = document.getElementById(things[idx].rail);
+    var d = document.getElementById(things[idx].drawer);
+    if(r) r.classList.add('unlocked');
+    if(d) d.classList.add('unlocked');
+  }
+
+  /* Pull quote share links */
+  var pageUrl = window.location.href;
+  function setupShare(id, text){
+    var xBtn = document.getElementById(id + '-x');
+    var liBtn = document.getElementById(id + '-li');
+    var xText = text + ' ' + pageUrl;
+    var liText = text;
+    if(xBtn) xBtn.href = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(xText);
+    if(liBtn) liBtn.href = 'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(pageUrl) + '&summary=' + encodeURIComponent(liText);
+  }
+  setupShare('pq1', '"Each retry carries a larger context... and each attempt burns tokens — real money — for a progressively lower probability of success."');
+  setupShare('pq2', '"Your pipeline will sometimes return answers with visible gaps instead of confident wrong answers. That\'s the point."');
+  setupShare('pq3', '"A partial result with a degradation manifest is the only result type that tells the truth about what happened."');
+
+  /* Forces widget */
+  var forces = { retry: false, context: false, latency: false, cost: false };
+  var patternOn = false;
+  var ctxPct = 100;
+
+  window.toggleForce = function(el){
+    var f = el.getAttribute('data-force');
+    forces[f] = !forces[f];
+    el.classList.toggle('active', forces[f]);
+    updateForces();
+  };
+  window.togglePattern = function(){
+    patternOn = !patternOn;
+    document.getElementById('pattern-btn').classList.toggle('active', patternOn);
+    updateForces();
+  };
+
+  function updateForces(){
+    var anyForce = forces.retry || forces.context || forces.latency || forces.cost;
+    var steps = ['ps0','ps1','ps2','ps3'].map(function(id){ return document.getElementById(id); });
+    var arrows = ['pa0','pa1','pa2'].map(function(id){ return document.getElementById(id); });
+    var fill = document.getElementById('ctx-fill');
+    var pctEl = document.getElementById('ctx-pct');
+    var status = document.getElementById('forces-status');
+
+    // Reset
+    steps.forEach(function(s){ s.className = 'pipe-step'; });
+    arrows.forEach(function(a){ a.className = 'pipe-arrow'; });
+    ctxPct = 100;
+
+    if(!anyForce){
+      fill.style.width = '100%';
+      fill.className = 'context-bar-fill';
+      pctEl.textContent = '100%';
+      status.textContent = 'Toggle forces to see how the pipeline responds.';
+      status.className = 'forces-status';
+      return;
+    }
+
+    if(patternOn){
+      // With pattern: retry happens once, step 2 stubbed, rest OK
+      steps[0].classList.add('ok');
+      steps[1].classList.add('stubbed');
+      steps[2].classList.add('ok');
+      steps[3].classList.add('ok');
+      ctxPct = 78;
+      fill.style.width = '78%';
+      fill.className = 'context-bar-fill';
+      pctEl.textContent = '78%';
+      status.textContent = 'Step 2 stubbed (context budget reached). Pipeline completes with degradation manifest.';
+      status.className = 'forces-status good';
+      return;
+    }
+
+    // Without pattern: chaos
+    var activeCount = Object.keys(forces).filter(function(k){ return forces[k]; }).length;
+    ctxPct = Math.max(15, 100 - activeCount * 22);
+    fill.style.width = ctxPct + '%';
+    fill.className = 'context-bar-fill ' + (ctxPct < 40 ? 'critical' : ctxPct < 65 ? 'warning' : '');
+    pctEl.textContent = ctxPct + '%';
+
+    if(forces.retry){
+      steps[0].classList.add('degrading');
+      steps[1].classList.add('degraded');
+      arrows[0].classList.add('broken');
+    }
+    if(forces.context){
+      steps[1].classList.add('degraded');
+      steps[2].classList.add('degrading');
+      arrows[1].classList.add('broken');
+    }
+    if(forces.latency){
+      steps[2].classList.add('degraded');
+      arrows[2].classList.add('broken');
+    }
+    if(forces.cost){
+      steps[3].classList.add('degraded');
+    }
+    // Fix classes: if multiple forces hit same step, degraded wins
+    steps.forEach(function(s){
+      if(s.classList.contains('degraded')) s.classList.remove('degrading');
+    });
+    if(!steps[0].classList.contains('degrading') && !steps[0].classList.contains('degraded')){}
+    else if(!steps[0].classList.contains('degraded')) steps[0].classList.add('degrading');
+
+    var degradedCount = steps.filter(function(s){ return s.classList.contains('degraded'); }).length;
+    status.textContent = degradedCount + ' of 4 steps degraded. Context at ' + ctxPct + '%. No manifest — pipeline produces corrupt output.';
+    status.className = 'forces-status bad';
+  }
+
+  /* Chart animation */
+  var chartBars = document.querySelectorAll('.chart-bar');
+  var chartObs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        var bars = e.target.querySelectorAll('.chart-bar');
+        bars.forEach(function(b, i){
+          if(reducedMotion){
+            b.style.width = b.getAttribute('data-width') + '%';
+          } else {
+            setTimeout(function(){
+              b.style.width = b.getAttribute('data-width') + '%';
+            }, i * 80);
+          }
+        });
+        chartObs.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.2 });
+  chartObs.observe(document.getElementById('chart-bars'));
+
+  /* Comparison table sorting */
+  var table = document.getElementById('comp-table');
+  var ths = table.querySelectorAll('th');
+  var sortState = { col: -1, asc: true };
+  ths.forEach(function(th){
+    th.addEventListener('click', function(){
+      var col = parseInt(th.getAttribute('data-col'));
+      if(sortState.col === col){ sortState.asc = !sortState.asc; }
+      else { sortState.col = col; sortState.asc = true; }
+      ths.forEach(function(t){ t.classList.remove('sorted'); });
+      th.classList.add('sorted');
+      var arrow = th.querySelector('.sort-arrow');
+      arrow.innerHTML = sortState.asc ? '&#9650;' : '&#9660;';
+      var tbody = table.querySelector('tbody');
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort(function(a, b){
+        var aText = a.children[col].textContent.trim();
+        var bText = b.children[col].textContent.trim();
+        var cmp = aText.localeCompare(bText);
+        return sortState.asc ? cmp : -cmp;
+      });
+      rows.forEach(function(r){ tbody.appendChild(r); });
+    });
+  });
+
+  /* Retrieval cards */
+  window.toggleAnswer = function(btn){
+    var card = btn.parentElement;
+    var ans = card.querySelector('.answer');
+    var isOpen = ans.classList.contains('show');
+    ans.classList.toggle('show');
+    btn.textContent = isOpen ? 'Reveal Answer' : 'Hide Answer';
+  };
+
+  /* Active nav highlighting */
+  var navLinks = document.querySelectorAll('.rail-nav a');
+  var sections = [];
+  navLinks.forEach(function(a){
+    var id = a.getAttribute('href').replace('#','');
+    var el = document.getElementById(id);
+    if(el) sections.push({ el: el, link: a });
+  });
+  var navObs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        navLinks.forEach(function(l){ l.classList.remove('active'); });
+        var match = sections.find(function(s){ return s.el === e.target; });
+        if(match) match.link.classList.add('active');
+      }
+    });
+  }, { threshold: 0.3, rootMargin: '-80px 0px -60% 0px' });
+  sections.forEach(function(s){ navObs.observe(s.el); });
+
+})();
+</script>
+</body>
+</html>
