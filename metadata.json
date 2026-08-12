@@ -189,6 +189,19 @@
   "reading_time_minutes": 6,
   "pinned": false,
   "research_window": "2026-01-31 to 2026-03-14"
+}, {
+  "id": "0024",
+  "slug": "feedback-eats-itself",
+  "title": "Feedback Eats Itself",
+  "hook": "A feedback loop that improves your aggregate metrics is probably narrowing your capability distribution — and the dashboard will never tell you.",
+  "path": "articles/feedback-eats-itself.html",
+  "date": "2025-02-18",
+  "status": "published",
+  "format": "pattern",
+  "tags": ["feedback-loops", "data-drift", "quarantine-boundary", "rlhf", "model-collapse"],
+  "reading_time_minutes": 8,
+  "pinned": false,
+  "research_window": "2025-01-14 → 2025-02-18"
 }
   ]
 }
