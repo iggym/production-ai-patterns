@@ -202,6 +202,19 @@
   "reading_time_minutes": 8,
   "pinned": false,
   "research_window": "2025-01-14 → 2025-02-18"
+},{
+  "id": "1042",
+  "slug": "context-filtered-gateway-decomposition",
+  "title": "Context-Filtered Gateway Decomposition",
+  "hook": "Long context windows aren't a feature; they're an expensive operational state leak.",
+  "path": "articles/context-filtered-gateway-decomposition.html",
+  "date": "2026-03-27",
+  "status": "published",
+  "format": "pattern",
+  "tags": ["architecture", "ai-gateway", "agentic-systems", "token-optimization"],
+  "reading_time_minutes": 6,
+  "pinned": false,
+  "research_window": "2026-02-13 through 2026-03-27"
 }
   ]
 }
