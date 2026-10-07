@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Valid JSON Is Not a Valid Answer — Production AI Patterns</title>
+<meta name="description" content="Structured outputs solved the parsing problem and quietly hid the correctness problem — a schema guarantees shape, never truth.">
+<link rel="canonical" href="https://iggym.github.io/production-ai-patterns/articles/valid-json-is-not-a-valid-answer.html">
+<meta property="og:title" content="Valid JSON Is Not a Valid Answer">
+<meta property="og:description" content="Structured outputs solved the parsing problem and quietly hid the correctness problem — a schema guarantees shape, never truth.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://iggym.github.io/production-ai-patterns/articles/valid-json-is-not-a-valid-answer.html">
+<meta property="og:site_name" content="Production AI Patterns">
+<meta property="article:published_time" content="2026-08-18">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Valid JSON Is Not a Valid Answer">
+<meta name="twitter:description" content="Structured outputs solved the parsing problem and quietly hid the correctness problem — a schema guarantees shape, never truth.">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Valid JSON Is Not a Valid Answer", "description": "Structured outputs solved the parsing problem and quietly hid the correctness problem — a schema guarantees shape, never truth.", "datePublished": "2026-08-18", "url": "https://iggym.github.io/production-ai-patterns/articles/valid-json-is-not-a-valid-answer.html", "author": {"@type": "Person", "name": "Production AI Patterns"}, "keywords": "reliability, structured-outputs, validation, graceful-degradation", "isPartOf": {"@type": "WebSite", "name": "Production AI Patterns", "url": "https://iggym.github.io/production-ai-patterns/"}}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0E1A2B; --surface:#13233A; --surface-2:#182B45; --text:#DCE8F5; --text-2:#B9CBDF;
+  --accent:#4FA8E0; --warn:#F2A65A; --ok:#5CC8A1; --bad:#F07A7A; --muted:#8FA5BD;
+  --line:rgba(220,232,245,0.16); --grid:rgba(220,232,245,0.05);
+  --display:'Space Grotesk',system-ui,sans-serif; --body:'IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --topbar-h:52px; --rail-w:230px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-padding-top:calc(var(--topbar-h) + 20px)}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:17px;line-height:1.7;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:32px 32px}
+a{color:var(--accent)} a:hover{color:#8CCBF2}
+:focus-visible{outline:2px solid var(--warn);outline-offset:2px}
+code,pre{font-family:var(--mono);font-size:.86em}
+code{background:var(--surface-2);padding:1px 6px;border-radius:3px}
+pre{background:#0A1422;border:1px solid var(--line);border-radius:4px;padding:16px 18px;overflow-x:auto;line-height:1.55}
+pre code{background:none;padding:0}
+strong{color:#fff}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:50}
+.topbar{position:sticky;top:0;z-index:40;height:var(--topbar-h);display:flex;align-items:center;gap:16px;padding:0 20px;
+  background:rgba(14,26,43,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.topbar .mark{font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--accent);text-decoration:none;white-space:nowrap}
+.topbar .crumb{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .toc-toggle{margin-left:auto;display:none;font-family:var(--mono);font-size:11px;background:none;color:var(--text);border:1px solid var(--line);padding:5px 10px;border-radius:3px;cursor:pointer}
+.layout{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);max-width:1140px;margin:0 auto}
+.rail{position:sticky;top:var(--topbar-h);align-self:start;height:calc(100vh - var(--topbar-h));overflow-y:auto;padding:28px 14px;border-right:1px solid var(--line)}
+.rail .label{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px 10px}
+.rail ol{list-style:none;margin:0;padding:0}
+.rail a{display:block;font-size:13px;line-height:1.4;color:var(--muted);text-decoration:none;padding:6px 10px;border-left:2px solid transparent}
+.rail a:hover{color:var(--text)}
+.rail a.active{color:var(--accent);border-left-color:var(--accent)}
+main{padding:40px 40px 80px;max-width:800px;min-width:0}
+article>section{margin:0 0 56px}
+.hero{margin-bottom:44px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.1em;color:var(--warn);margin:0 0 14px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(2rem,5vw,3rem);line-height:1.1;letter-spacing:-.01em;margin:0 0 16px}
+.subtitle{font-size:1.2rem;color:var(--text-2);margin:0 0 18px;max-width:640px}
+.meta-row{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 18px}
+h2{font-family:var(--display);font-size:1.65rem;line-height:1.25;margin:0 0 18px;padding-top:6px}
+h3{font-family:var(--display);font-size:1.15rem;margin:26px 0 10px}
+p{margin:0 0 16px}
+ul,ol{padding-left:22px} li{margin-bottom:6px}
+.insights{border:1px solid var(--warn);background:rgba(242,166,90,.06);border-radius:4px;padding:20px 22px}
+.insights h2{font-size:1.1rem;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--warn)}
+.insights ol{margin:0}
+.scene{border-left:3px solid var(--accent);padding-left:20px}
+.cite{font-family:var(--mono);font-size:.78em;vertical-align:super;text-decoration:none}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}
+.compare>div{border:1px solid var(--line);border-radius:4px;padding:16px 18px;background:var(--surface)}
+.compare h3{margin-top:0;font-size:.85rem;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.compare .old h3{color:var(--bad)} .compare .new h3{color:var(--ok)}
+.compare ul{margin:0;padding-left:18px;font-size:15.5px}
+.pattern-card{border:1px solid var(--accent);border-radius:4px;background:var(--surface);overflow:hidden}
+.pattern-card header{background:rgba(79,168,224,.12);padding:16px 20px;border-bottom:1px solid var(--line)}
+.pattern-card header .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent)}
+.pattern-card header h2{margin:4px 0 0;font-size:1.5rem}
+.pattern-card dl{margin:0;padding:8px 20px 16px}
+.pattern-card dt{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:14px}
+.pattern-card dd{margin:4px 0 0}
+.pattern-card dd ul,.pattern-card dd ol{margin:4px 0 0}
+figure{margin:20px 0}
+figure svg{width:100%;height:auto;display:block;background:var(--surface);border:1px solid var(--line);border-radius:4px}
+figcaption{font-size:13.5px;color:var(--muted);margin-top:8px}
+.widget{border:1px solid var(--line);border-radius:4px;background:var(--surface);padding:20px 22px}
+.widget .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 22px;margin-bottom:18px}
+.widget label{display:block;font-family:var(--mono);font-size:12px;color:var(--text-2);margin-bottom:4px}
+.widget output{color:var(--warn);font-weight:500}
+.widget input[type=range]{width:100%;accent-color:var(--accent)}
+.widget .toggle{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;color:var(--text-2)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.stat{border:1px solid var(--line);border-radius:4px;padding:12px 14px;background:var(--surface-2)}
+.stat .v{font-family:var(--display);font-size:1.5rem;font-weight:700;line-height:1.2}
+.stat .l{font-size:12.5px;color:var(--muted)}
+.stat.bad .v{color:var(--bad)} .stat.ok .v{color:var(--ok)} .stat.warn .v{color:var(--warn)}
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar{display:grid;grid-template-columns:150px 1fr 80px;align-items:center;gap:10px;font-size:13px}
+.bar .track{height:14px;background:rgba(220,232,245,.08);border-radius:2px;overflow:hidden}
+.bar .fill{height:100%;background:var(--accent);width:0}
+@media (prefers-reduced-motion:no-preference){.bar .fill{transition:width .25s ease}}
+.bar .fill.bad{background:var(--bad)} .bar .fill.ok{background:var(--ok)} .bar .fill.warn{background:var(--warn)}
+.bar .val{font-family:var(--mono);font-size:12px;text-align:right}
+.assumptions{font-size:13px;color:var(--muted);margin:14px 0 0}
+.failure{border:1px solid var(--line);border-radius:4px;padding:14px 18px;margin-bottom:12px;background:var(--surface)}
+.failure h3{margin:0 0 6px;font-size:1.02rem}
+.failure p{margin:0;font-size:15.5px}
+.evidence-tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid currentColor;margin-right:6px}
+.evidence-tag.measured{color:var(--ok)} .evidence-tag.reported{color:var(--accent)} .evidence-tag.inference{color:var(--warn)}
+.whatif{border-left:3px solid var(--warn);padding:2px 0 2px 18px;margin-top:22px}
+.connections{display:grid;gap:12px}
+.connections a{display:block;border:1px solid var(--line);border-radius:4px;padding:14px 18px;text-decoration:none;color:var(--text);background:var(--surface)}
+.connections a:hover{border-color:var(--accent)}
+.connections .t{font-family:var(--display);font-weight:700;color:var(--accent)}
+.checklist fieldset{border:1px solid var(--line);border-radius:4px;margin:0 0 14px;padding:12px 18px}
+.checklist legend{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--warn);padding:0 6px}
+.checklist label{display:flex;gap:10px;align-items:flex-start;padding:5px 0;cursor:pointer}
+.checklist input{margin-top:6px;accent-color:var(--ok)}
+.checklist .progress-note{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.tomorrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.tomorrow>div{border:1px solid var(--line);border-radius:4px;padding:14px 16px;background:var(--surface)}
+.tomorrow .when{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--accent);text-transform:uppercase}
+details{border:1px solid var(--line);border-radius:4px;padding:12px 16px;margin-bottom:10px;background:var(--surface)}
+summary{cursor:pointer;font-weight:500}
+details[open] summary{margin-bottom:8px}
+.sources ol{font-size:14.5px}
+.sources .bg{font-family:var(--mono);font-size:10.5px;color:var(--muted);border:1px solid var(--line);padding:1px 5px;border-radius:2px;margin-left:4px}
+.site-footer{border-top:1px solid var(--line);padding:32px 24px;text-align:center;font-size:14px;color:var(--muted)}
+.site-footer nav{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;margin-bottom:12px;font-family:var(--mono);font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:15px;margin:16px 0}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-family:var(--mono);font-size:12px;letter-spacing:.04em}
+@media (max-width:959px){
+  .layout{grid-template-columns:1fr}
+  .rail{display:none;position:fixed;top:var(--topbar-h);left:0;right:0;height:auto;max-height:70vh;background:var(--bg);z-index:30;border-right:none;border-bottom:1px solid var(--line)}
+  .rail.open{display:block}
+  .topbar .toc-toggle{display:inline-block}
+  main{padding:28px 16px 60px}
+  .compare{grid-template-columns:1fr}
+  .bar{grid-template-columns:110px 1fr 64px}
+}
+</style>
+</head>
+<body data-slug="valid-json-is-not-a-valid-answer">
+<div id="progress" aria-hidden="true"></div>
+<header class="topbar">
+  <a class="mark" href="../index.html">// PRODUCTION-AI-PATTERNS</a>
+  <span class="crumb">RELIABILITY / Two-Gate Output Contract</span>
+  <button class="toc-toggle" id="toc-toggle" aria-controls="toc" aria-expanded="false">Contents</button>
+</header>
+<div class="layout">
+<nav class="rail" id="toc" aria-label="Table of contents">
+  <p class="label">Contents</p>
+  <ol>
+<li><a href="#insights">Three things</a></li>
+<li><a href="#opening-scene">Opening scene</a></li>
+<li><a href="#reframe">The reframe</a></li>
+<li><a href="#pattern-card">Pattern card</a></li>
+<li><a href="#how-it-works">How it works</a></li>
+<li><a href="#playground">Forces playground</a></li>
+<li><a href="#trade-offs">What fights back</a></li>
+<li><a href="#evidence">The evidence</a></li>
+<li><a href="#connections">Hidden connections</a></li>
+<li><a href="#checklist">Checklist</a></li>
+<li><a href="#do-this-tomorrow">Do this tomorrow</a></li>
+<li><a href="#recall">Recall practice</a></li>
+<li><a href="#sources">Sources</a></li>
+  </ol>
+</nav>
+<main id="main">
+<article>
+<header class="hero">
+  <p class="eyebrow">PATTERN-0601 · RELIABILITY</p>
+  <h1>Valid JSON Is Not a Valid Answer</h1>
+  <p class="subtitle">Structured outputs solved the parsing problem and quietly hid the correctness problem — a schema guarantees shape, never truth.</p>
+  <div class="meta-row"><span>August 18, 2026</span><span>8 min read</span><span>Research window: 2026-07-07 → 2026-08-18</span></div>
+</header>
+<section id="insights" data-toc="Three things" class="insights">
+  <h2>Three things you didn't know you needed</h2>
+  <ol>
+    <li><strong>Constrained decoding moves errors; it doesn't remove them.</strong> When a model can no longer break the syntax, the errors that used to break parsing come out as plausible values instead.</li>
+    <li><strong>Your repair loop needs a budget, not a retry count.</strong> Re-prompting a model with its own wrong answer adds tokens and anchors it to the mistake. Two attempts are usually the most worth paying for.</li>
+    <li><strong>The most useful validator is cheap and boring.</strong> Cross-field invariants (totals add up, dates are ordered, IDs exist) catch more production defects than an LLM-as-judge, and they cost microseconds.</li>
+  </ol>
+</section>
+
+<section id="opening-scene" data-toc="Opening scene">
+  <h2>The Format Drifted, the Code Didn't</h2>
+  <div class="scene">
+    <p>In July 2023, researchers at Stanford and UC Berkeley published a simple, uncomfortable measurement. They sent the same code-generation prompts to the March and June 2023 snapshots of GPT-4 and counted how many responses could be executed directly. In March, <strong>52%</strong> could. In June, <strong>10%</strong> could.<a class="cite" href="#src-1">[1]</a></p>
+    <p>The code itself hadn't got much worse. The model had started wrapping its answers in markdown fences and adding prose around them. Any pipeline that took the response as-is and ran it would have broken overnight, without a deploy, a config change or an alert.</p>
+    <p>The industry's fix was <em>structured outputs</em>: constrain decoding so the model can only produce tokens that fit a JSON Schema. On OpenAI's own complex-schema evaluation, schema adherence went from under 40% to 100%.<a class="cite" href="#src-2">[2]</a> The parse errors went away. Many teams took that to mean the problem was solved.</p>
+  </div>
+  <p>It wasn't. The parse error was the <em>visible</em> failure mode. Once it was gone, the remaining failures became invisible.</p>
+</section>
+
+<section id="reframe" data-toc="The reframe">
+  <h2>Shape Is a Contract, Truth Is a Different Contract</h2>
+  <p>A JSON Schema tells you that <code>refund_amount</code> is a number. It cannot tell you that the number is no larger than the order total. Nor can it tell you that the <code>customer_id</code> exists, that <code>start_date</code> comes before <code>end_date</code>, or that the category the model picked is consistent with the text it read.</p>
+  <p>Before structured outputs, a confused model often produced malformed output, and your parser complained loudly. Now a confused model produces a <strong>well-formed wrong answer</strong>, and your parser accepts it. Constraining the shape removed a signal you were getting for free.</p>
+  <div class="compare">
+    <div class="old"><h3>Orthodox view</h3><ul>
+      <li>"We use structured outputs, so output is validated."</li>
+      <li>Retries happen on parse failure.</li>
+      <li>Success metric: % of responses that parse.</li>
+      <li>Failure surfaces as an exception.</li>
+    </ul></div>
+    <div class="new"><h3>Production reality</h3><ul>
+      <li>Schema validity is gate one of two.</li>
+      <li>Repairs happen on <em>semantic</em> failure, with a budget.</li>
+      <li>Success metric: % of responses that are <em>used</em> without correction.</li>
+      <li>Failure surfaces as an explicit degraded result.</li>
+    </ul></div>
+  </div>
+  <p>Treat model output the way you treat a request from an untrusted client. Parsing it is only the first check, and nobody calls a parsed request authorized.</p>
+</section>
+
+<section id="pattern-card" data-toc="Pattern card">
+  <div class="pattern-card">
+    <header><span class="k">PATTERN-0601 · RELIABILITY</span><h2>Two-Gate Output Contract</h2></header>
+    <dl>
+      <dt>Intent</dt><dd>Separate <em>can we read it</em> from <em>can we trust it</em>, and give each question its own gate, failure path and metric.</dd>
+      <dt>Context</dt><dd>LLM output is used by code: API calls, database writes, routing decisions, UI rendering. Any time a wrong value causes harm that a human won't catch.</dd>
+      <dt>Problem</dt><dd>Schema enforcement guarantees well-formed output, but the downstream system needs output that is correct. Without a second gate, semantically invalid values flow through at full confidence.</dd>
+      <dt>Forces</dt><dd><ul>
+        <li><strong>Latency vs. correctness:</strong> every validation and repair round trip adds time to the critical path.</li>
+        <li><strong>Strictness vs. capability:</strong> tight format constraints can degrade reasoning quality.<a class="cite" href="#src-3">[3]</a></li>
+        <li><strong>Repair vs. anchoring:</strong> feeding errors back helps, but the model tends to defend its first answer.</li>
+        <li><strong>Coverage vs. cost:</strong> deterministic checks are cheap but narrow; model-based judges are broad but slow and non-deterministic.</li>
+      </ul></dd>
+      <dt>Solution</dt><dd><ol>
+        <li><strong>Gate 1 (shape):</strong> constrained decoding or strict schema parsing. Fail → one immediate retry, then fallback.</li>
+        <li><strong>Gate 2 (meaning):</strong> a validator chain ordered by cost: type refinements → cross-field invariants → referential checks against your own data → optional model-based judge for the remaining fuzzy cases.</li>
+        <li><strong>Bounded repair:</strong> on gate 2 failure, re-prompt with the <em>specific</em> violated rule (not the whole error dump), and give the repairs a fixed budget (attempts and tokens).</li>
+        <li><strong>Explicit degradation:</strong> when the budget runs out, return a typed <code>Degraded</code> result (ask a human, use a rules-based default, or refuse). Never return the last invalid attempt.</li>
+        <li><strong>Record which rule fired:</strong> each violation increments a counter tagged by rule, model and prompt version.</li>
+      </ol></dd>
+      <dt>Consequences</dt><dd><strong>Benefits:</strong> wrong answers turn into countable, routable events; violation rates per rule become a regression signal for prompt and model changes. <strong>Liabilities:</strong> adds p95 latency on the repair path; invariants have to be maintained alongside the schema; overly strict rules can cause degradation storms.</dd>
+      <dt>Related patterns</dt><dd><a href="./bounded-cascade-degradation.html">Bounded Cascade Degradation</a> · <a href="./deploying-prompts-like-code-is-a-trap.html">Prompt Flight Rules</a> · <a href="./deaf-at-the-wheel.html">Decision-Layer Observability</a></dd>
+    </dl>
+  </div>
+</section>
+
+<section id="how-it-works" data-toc="How it works">
+  <h2>How It Works</h2>
+  <p>The contract lives in the service that calls the model, not in the prompt. The prompt can <em>describe</em> the rules; only code can <em>enforce</em> them.</p>
+  <figure>
+    <svg viewBox="0 0 760 250" role="img" aria-label="Two-gate output contract flow: model output passes shape gate then meaning gate; failures route to bounded repair or degraded result">
+      <title>Two-Gate Output Contract flow</title>
+      <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8FA5BD"/></marker></defs>
+      <g font-family="IBM Plex Mono, monospace" font-size="12" fill="#DCE8F5">
+        <rect x="16" y="90" width="110" height="56" rx="3" fill="#182B45" stroke="#4FA8E0"/><text x="71" y="114" text-anchor="middle">Model call</text><text x="71" y="131" text-anchor="middle" fill="#8FA5BD">constrained</text>
+        <rect x="170" y="90" width="120" height="56" rx="3" fill="#182B45" stroke="#4FA8E0"/><text x="230" y="114" text-anchor="middle">Gate 1</text><text x="230" y="131" text-anchor="middle" fill="#8FA5BD">shape / schema</text>
+        <rect x="334" y="90" width="140" height="56" rx="3" fill="#182B45" stroke="#4FA8E0"/><text x="404" y="114" text-anchor="middle">Gate 2</text><text x="404" y="131" text-anchor="middle" fill="#8FA5BD">invariants · refs</text>
+        <rect x="520" y="90" width="120" height="56" rx="3" fill="#13233A" stroke="#5CC8A1"/><text x="580" y="122" text-anchor="middle" fill="#5CC8A1">Downstream</text>
+        <rect x="334" y="186" width="140" height="48" rx="3" fill="#13233A" stroke="#F2A65A"/><text x="404" y="207" text-anchor="middle" fill="#F2A65A">Bounded repair</text><text x="404" y="223" text-anchor="middle" fill="#8FA5BD">≤ k attempts</text>
+        <rect x="520" y="186" width="120" height="48" rx="3" fill="#13233A" stroke="#F07A7A"/><text x="580" y="214" text-anchor="middle" fill="#F07A7A">Degraded(…)</text>
+        <rect x="334" y="16" width="140" height="44" rx="3" fill="#13233A" stroke="#8FA5BD" stroke-dasharray="4 3"/><text x="404" y="43" text-anchor="middle" fill="#8FA5BD">violation metrics</text>
+      </g>
+      <g stroke="#8FA5BD" stroke-width="1.5" fill="none" marker-end="url(#a1)">
+        <path d="M126 118 H166"/><path d="M290 118 H330"/><path d="M474 118 H516"/>
+        <path d="M404 146 V182"/><path d="M334 210 C 120 230, 60 170, 71 150"/><path d="M474 210 H516"/><path d="M404 90 V64"/>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="#8FA5BD"><text x="412" y="170">fail</text><text x="150" y="232">re-prompt with violated rule</text><text x="480" y="204">budget spent</text><text x="480" y="112">pass</text></g>
+    </svg>
+    <figcaption>Gate 1 guarantees parseability. Gate 2 decides whether the value is safe to act on. Repair is bounded, and its exit is a typed degraded result.</figcaption>
+  </figure>
+  <h3>Reference shape (Python)</h3>
+<pre><code>from dataclasses import dataclass
+from typing import Callable, Generic, TypeVar
+T = TypeVar("T")
+
+@dataclass
+class Ok(Generic[T]):
+    value: T
+    attempts: int
+
+@dataclass
+class Degraded:
+    reason: str          # the last violated rule, e.g. "refund_le_order_total"
+    attempts: int
+
+Rule = tuple[str, Callable[[T], bool], str]  # (id, predicate, message fed back to model)
+
+def two_gate(call: Callable[[str | None], T], rules: list[Rule], max_repairs: int = 2) -> Ok[T] | Degraded:
+    feedback = None
+    for attempt in range(1, max_repairs + 2):
+        out = call(feedback)                        # gate 1: call() parses against the schema or raises
+        failed = next((r for r in rules if not r[1](out)), None)
+        if failed is None:
+            return Ok(out, attempt)
+        metrics.incr("output_contract.violation", tags={"rule": failed[0]})
+        feedback = f"Your previous answer violated: {failed[2]}. Fix only that."
+    return Degraded(reason=failed[0], attempts=attempt)
+
+rules = [
+    ("refund_le_order_total", lambda r: r.refund_amount &lt;= order.total, "refund_amount must be ≤ the order total"),
+    ("order_exists",          lambda r: orders.exists(r.order_id),       "order_id must be one of the IDs in the context"),
+]</code></pre>
+  <p>Two details matter more than they look. First, the feedback names <em>one</em> rule. Pasting a full validation trace back into the prompt makes the model rewrite fields that were already correct. Second, <code>Degraded</code> is a distinct type. Callers have to handle it, so "we returned the last attempt anyway" can't be done by accident.</p>
+</section>
+
+<section id="playground" data-toc="Forces playground">
+  <h2>Interactive Forces Playground</h2>
+  <p>Move the sliders to see where wrong answers end up under a schema-only setup and under a two-gate contract.</p>
+  <div class="widget" id="w1">
+    <div class="controls">
+      <div><label for="w1-sem">Semantically correct on first try: <output for="w1-sem"></output></label><input type="range" id="w1-sem" min="70" max="99" value="92" data-fmt="pct"></div>
+      <div><label for="w1-det">Gate 2 detection rate: <output for="w1-det"></output></label><input type="range" id="w1-det" min="0" max="100" value="80" data-fmt="pct"></div>
+      <div><label for="w1-rep">Repair success per attempt: <output for="w1-rep"></output></label><input type="range" id="w1-rep" min="10" max="90" value="55" data-fmt="pct"></div>
+      <div><label for="w1-k">Max repair attempts: <output for="w1-k"></output></label><input type="range" id="w1-k" min="0" max="5" value="2"></div>
+    </div>
+    <div class="readout" aria-live="polite">
+      <div class="stat bad"><div class="v" id="w1-wrong-a">—</div><div class="l">wrong answers acted on, schema-only</div></div>
+      <div class="stat ok"><div class="v" id="w1-wrong-b">—</div><div class="l">wrong answers acted on, two-gate</div></div>
+      <div class="stat warn"><div class="v" id="w1-deg">—</div><div class="l">explicitly degraded (routed, not hidden)</div></div>
+      <div class="stat"><div class="v" id="w1-calls">—</div><div class="l">expected model calls per request</div></div>
+    </div>
+    <div class="bars" id="w1-bars"></div>
+    <p class="assumptions">Model assumptions: gate 1 is constrained decoding, so shape failures are ~0. Detected failures are repaired independently per attempt. Undetected failures go downstream. Illustrative, not measured: plug in your own violation and detection rates.</p>
+  </div>
+</section>
+
+<section id="trade-offs" data-toc="What fights back">
+  <h2>What Fights Back</h2>
+  <div class="failure"><h3>Format constraints that tax reasoning</h3><p>Forcing a model straight into a strict schema can reduce answer quality on reasoning-heavy tasks.<a class="cite" href="#src-3">[3]</a> Mitigation: let the model reason in a free-text field (or a separate call), then extract into the schema. Gate 2 checks the extracted fields, not the reasoning.</p></div>
+  <div class="failure"><h3>Degradation storms after a model update</h3><p>A new model snapshot that phrases things differently can trip a strict rule on 30% of traffic at once. Mitigation: alert on each rule's violation <em>rate</em>, and roll out rule changes behind a flag, the same way as <a href="./deploying-prompts-like-code-is-a-trap.html">prompt changes</a>.</p></div>
+  <div class="failure"><h3>The judge becomes the bottleneck</h3><p>LLM-as-judge validators add a second non-deterministic dependency with its own latency and outages. Mitigation: run them last, only on fields that deterministic rules can't cover, and design them to fail open to <code>Degraded</code>, never to "pass".</p></div>
+</section>
+
+<section id="evidence" data-toc="The evidence">
+  <h2>The Evidence</h2>
+  <ul>
+    <li><span class="evidence-tag measured">measured</span>Between the March and June 2023 GPT-4 snapshots, directly executable code generations fell from 52.0% to 10.0%, mostly because of added formatting rather than wrong code.<a class="cite" href="#src-1">[1]</a> Output <em>format</em> is a property that drifts between model versions.</li>
+    <li><span class="evidence-tag measured">measured</span>OpenAI reported that constrained decoding raised complex-schema adherence from under 40% (gpt-4-0613) to 100% (gpt-4o-2024-08-06 with Structured Outputs).<a class="cite" href="#src-2">[2]</a> Gate 1 is effectively a solved problem on supported providers.</li>
+    <li><span class="evidence-tag measured">measured</span>Tam et al. found that strict format restrictions such as JSON mode can measurably degrade LLM reasoning performance compared with looser formats.<a class="cite" href="#src-3">[3]</a></li>
+    <li><span class="evidence-tag reported">reported</span>Validation-and-retry libraries such as Instructor became popular by wrapping exactly this loop: a Pydantic model with validators, plus automatic re-asks on validation errors.<a class="cite" href="#src-4">[4]</a></li>
+    <li><span class="evidence-tag inference">inference</span>Once shape errors are gone, the remaining error budget is almost entirely semantic. Without gate 2, those errors are absent from every dashboard built on parse rates.</li>
+  </ul>
+  <div class="whatif">
+    <h3>But what if the model is good enough now?</h3>
+    <p>It may well be, for your current prompt, your current traffic and your current snapshot. The contract isn't a bet that the model is bad. It's a sensor for the day one of those three changes. Rules that never fire cost microseconds. Rules that fire tell you about a regression before your users do.</p>
+  </div>
+</section>
+
+<section id="connections" data-toc="Hidden connections">
+  <h2>Hidden Connections</h2>
+  <div class="connections">
+    <a href="./bounded-cascade-degradation.html"><span class="t">Bounded Cascade Degradation →</span><br>The repair loop is a small retry cascade. Apply the same rule: each attempt must be cheaper or more constrained than the last, or stop.</a>
+    <a href="./deaf-at-the-wheel.html"><span class="t">Deaf at the Wheel →</span><br>Rule-violation counters are decision-layer signals. They measure what the output <em>meant</em>, not whether the call succeeded.</a>
+    <a href="./deploying-prompts-like-code-is-a-trap.html"><span class="t">Deploying Prompts Like Code Is a Trap →</span><br>Violation rates per rule are the gate metric that a prompt canary has been missing.</a>
+  </div>
+</section>
+
+<section id="checklist" data-toc="Checklist" class="checklist">
+  <h2>The Checklist</h2>
+  <p class="progress-note" aria-live="polite"></p>
+  <fieldset><legend>Instrument</legend>
+    <label><input type="checkbox" id="c1-1"> Every LLM-to-code boundary is listed, with its consumer and blast radius.</label>
+    <label><input type="checkbox" id="c1-2"> Violation counters are tagged by rule, model snapshot and prompt version.</label>
+  </fieldset>
+  <fieldset><legend>Enforce</legend>
+    <label><input type="checkbox" id="c1-3"> Schema enforcement (gate 1) is on wherever the provider supports it.</label>
+    <label><input type="checkbox" id="c1-4"> At least one cross-field invariant per output type.</label>
+    <label><input type="checkbox" id="c1-5"> Referential checks: every ID the model returns is verified against your own data.</label>
+  </fieldset>
+  <fieldset><legend>Degrade</legend>
+    <label><input type="checkbox" id="c1-6"> Repairs have a fixed attempt and token budget.</label>
+    <label><input type="checkbox" id="c1-7"> Exhausted budget returns a typed degraded result with a defined handler.</label>
+  </fieldset>
+  <fieldset><legend>Review</legend>
+    <label><input type="checkbox" id="c1-8"> Rule-violation rates are part of the release gate for prompt and model changes.</label>
+  </fieldset>
+</section>
+
+<section id="do-this-tomorrow" data-toc="Do this tomorrow">
+  <h2>Do This Tomorrow</h2>
+  <div class="tomorrow">
+    <div><p class="when">30 minutes</p><p>Grep for every place model output is parsed. Count how many have any check beyond parsing.</p></div>
+    <div><p class="when">1 day</p><p>Add three invariants to your highest-blast-radius output type and log violations (log only, don't block yet).</p></div>
+    <div><p class="when">1 sprint</p><p>Turn on bounded repair with a typed <code>Degraded</code> path, and add violation rates to your release checklist.</p></div>
+  </div>
+</section>
+
+<section id="recall" data-toc="Recall practice">
+  <h2>Recall Practice</h2>
+  <details><summary>Why can structured outputs <em>reduce</em> how visible errors are?</summary><p>Because they remove the parse failures that used to signal confusion. A confused model now produces a well-formed wrong value, which passes every check built only on shape.</p></details>
+  <details><summary>What should repair feedback contain?</summary><p>The single violated rule in plain language. A full error dump invites the model to rewrite correct fields and anchors it to its mistake.</p></details>
+  <details><summary>What does the loop return when the repair budget runs out?</summary><p>A typed degraded result that the caller has to handle, never the last invalid attempt.</p></details>
+</section>
+
+<section id="sources" data-toc="Sources" class="sources">
+  <h2>Sources</h2>
+  <ol>
+    <li id="src-1">Lingjiao Chen, Matei Zaharia, James Zou. "How is ChatGPT's behavior changing over time?" arXiv, July 2023. <a href="https://arxiv.org/abs/2307.09009">arxiv.org/abs/2307.09009</a> <span class="bg">background</span></li>
+    <li id="src-2">OpenAI. "Introducing Structured Outputs in the API." August 6, 2024. <a href="https://openai.com/index/introducing-structured-outputs-in-the-api/">openai.com</a> <span class="bg">background</span></li>
+    <li id="src-3">Zhi Rui Tam et al. "Let Me Speak Freely? A Study on the Impact of Format Restrictions on Performance of Large Language Models." arXiv, August 2024. <a href="https://arxiv.org/abs/2408.02442">arxiv.org/abs/2408.02442</a> <span class="bg">background</span></li>
+    <li id="src-4">Instructor: structured outputs for LLMs (validation and re-ask). <a href="https://github.com/instructor-ai/instructor">github.com/instructor-ai/instructor</a> <span class="bg">background</span></li>
+    <li id="src-5">JSON Schema specification. <a href="https://json-schema.org/">json-schema.org</a> <span class="bg">background</span></li>
+  </ol>
+</section>
+
+</article>
+</main>
+</div>
+<footer class="site-footer">
+  <nav aria-label="Article footer">
+    <a href="../index.html">← Back to the catalog</a>
+    <a href="https://x.com/intent/tweet?url=https://iggym.github.io/production-ai-patterns/articles/valid-json-is-not-a-valid-answer.html&amp;text=Valid JSON Is Not a Valid Answer" rel="noopener" target="_blank">Share on X</a>
+    <a href="https://www.linkedin.com/sharing/share-offsite/?url=https://iggym.github.io/production-ai-patterns/articles/valid-json-is-not-a-valid-answer.html" rel="noopener" target="_blank">Share on LinkedIn</a>
+  </nav>
+  <p>Part of Production AI Patterns — a pattern language for AI that has to survive contact with production.</p>
+</footer>
+<script>
+(function(){
+  var prog=document.getElementById('progress');
+  function onScroll(){var h=document.documentElement;var max=h.scrollHeight-h.clientHeight;prog.style.width=(max>0?(h.scrollTop/max*100):0)+'%';}
+  document.addEventListener('scroll',onScroll,{passive:true});onScroll();
+  var rail=document.getElementById('toc');var btn=document.getElementById('toc-toggle');
+  btn.addEventListener('click',function(){var o=rail.classList.toggle('open');btn.setAttribute('aria-expanded',o?'true':'false');});
+  rail.addEventListener('click',function(e){if(e.target.tagName==='A'){rail.classList.remove('open');btn.setAttribute('aria-expanded','false');}});
+  var links=[].slice.call(rail.querySelectorAll('a'));
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(entries){entries.forEach(function(en){if(en.isIntersecting){links.forEach(function(a){a.classList.toggle('active',a.getAttribute('href')==='#'+en.target.id);});}});},{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('article>section[id]').forEach(function(s){io.observe(s);});
+  }
+  var key='pap-checklist-'+document.body.dataset.slug;var boxes=[].slice.call(document.querySelectorAll('.checklist input[type=checkbox]'));
+  var note=document.querySelector('.checklist .progress-note');var state={};
+  try{state=JSON.parse(localStorage.getItem(key)||'{}')||{};}catch(e){state={};}
+  function upd(){var n=boxes.filter(function(b){return b.checked;}).length;if(note)note.textContent=n+' of '+boxes.length+' done';}
+  boxes.forEach(function(b){if(state[b.id])b.checked=true;b.addEventListener('change',function(){state[b.id]=b.checked;try{localStorage.setItem(key,JSON.stringify(state));}catch(e){}upd();});});
+  upd();
+})();
+window.PAP={
+  pct:function(x,d){return (x*100).toFixed(d==null?1:d)+'%';},
+  bars:function(el,rows){var max=rows.reduce(function(m,r){return Math.max(m,r.max!=null?r.max:r.value);},0)||1;
+    el.innerHTML=rows.map(function(r){var w=Math.max(0,Math.min(100,r.value/(r.max!=null?r.max:max)*100));
+      return '<div class="bar"><span>'+r.label+'</span><div class="track" role="presentation"><div class="fill '+(r.cls||'')+'" style="width:'+w.toFixed(1)+'%"></div></div><span class="val">'+r.text+'</span></div>';}).join('');},
+  bind:function(ids,fn){ids.forEach(function(id){var el=document.getElementById(id);var o=document.querySelector('output[for="'+id+'"]');
+    el.addEventListener('input',function(){if(o)o.textContent=el.dataset.fmt?window.PAP.fmt(el):el.value;fn();});if(o)o.textContent=el.dataset.fmt?window.PAP.fmt(el):el.value;});fn();},
+  fmt:function(el){var v=+el.value;switch(el.dataset.fmt){case 'pct':return v+'%';case 'pct1':return v.toFixed(1)+'%';case 'pct2':return v.toFixed(2)+'%';case 'k':return v>=1000?(v/1000)+'k':String(v);default:return String(v);}},
+  num:function(id){return +document.getElementById(id).value;}
+};
+
+(function(){
+  var P=window.PAP;
+  P.bind(['w1-sem','w1-det','w1-rep','w1-k'],function(){
+    var bad=1-P.num('w1-sem')/100, d=P.num('w1-det')/100, r=P.num('w1-rep')/100, k=P.num('w1-k');
+    var wrongA=bad;
+    var wrongB=bad*(1-d);
+    var deg=bad*d*Math.pow(1-r,k);
+    var repaired=bad*d*(1-Math.pow(1-r,k));
+    var extra=0; for(var i=0;i<k;i++){extra+=Math.pow(1-r,i);}
+    var calls=1+bad*d*extra;
+    document.getElementById('w1-wrong-a').textContent=P.pct(wrongA);
+    document.getElementById('w1-wrong-b').textContent=P.pct(wrongB);
+    document.getElementById('w1-deg').textContent=P.pct(deg);
+    document.getElementById('w1-calls').textContent=calls.toFixed(2)+'×';
+    P.bars(document.getElementById('w1-bars'),[
+      {label:'Correct first try',value:1-bad,text:P.pct(1-bad),cls:'ok',max:1},
+      {label:'Repaired by loop',value:repaired,text:P.pct(repaired),cls:'',max:1},
+      {label:'Degraded explicitly',value:deg,text:P.pct(deg),cls:'warn',max:1},
+      {label:'Wrong, acted on',value:wrongB,text:P.pct(wrongB),cls:'bad',max:1}
+    ]);
+  });
+})();
+
+</script>
+</body>
+</html>
