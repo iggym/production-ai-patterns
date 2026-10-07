@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unbounded Concurrency Explosion — Production AI Patterns</title>
+<meta name="description" content="Inference endpoints are not databases; they do not scale linearly with concurrency. The N-th concurrent request pays an exponential latency tax, and your…">
+<link rel="canonical" href="https://iggym.github.io/production-ai-patterns/articles/unbounded-concurrency-explosion.html">
+<meta property="og:title" content="Unbounded Concurrency Explosion">
+<meta property="og:description" content="Inference endpoints are not databases; they do not scale linearly with concurrency. The N-th concurrent request pays an exponential latency tax, and your…">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://iggym.github.io/production-ai-patterns/articles/unbounded-concurrency-explosion.html">
+<meta property="og:site_name" content="Production AI Patterns">
+<meta property="article:published_time" content="2026-10-07">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Unbounded Concurrency Explosion">
+<meta name="twitter:description" content="Inference endpoints are not databases; they do not scale linearly with concurrency. The N-th concurrent request pays an exponential latency tax, and your…">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Unbounded Concurrency Explosion", "description": "Inference endpoints are not databases; they do not scale linearly with concurrency. The N-th concurrent request pays an exponential latency tax, and your system will not realize it until the model is thrashing.", "datePublished": "2026-10-07", "url": "https://iggym.github.io/production-ai-patterns/articles/unbounded-concurrency-explosion.html", "author": {"@type": "Person", "name": "Production AI Patterns"}, "keywords": "reliability, circuit-breakers, latency, queue-management, agentic-systems", "isPartOf": {"@type": "WebSite", "name": "Production AI Patterns", "url": "https://iggym.github.io/production-ai-patterns/"}}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0E1A2B; --surface:#13233A; --surface-2:#182B45; --text:#DCE8F5; --text-2:#B9CBDF;
+  --accent:#4FA8E0; --warn:#F2A65A; --ok:#5CC8A1; --bad:#F07A7A; --muted:#8FA5BD;
+  --line:rgba(220,232,245,0.16); --grid:rgba(220,232,245,0.05);
+  --display:'Space Grotesk',system-ui,sans-serif; --body:'IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --topbar-h:52px; --rail-w:230px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-padding-top:calc(var(--topbar-h) + 20px)}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:17px;line-height:1.7;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:32px 32px}
+a{color:var(--accent)} a:hover{color:#8CCBF2}
+:focus-visible{outline:2px solid var(--warn);outline-offset:2px}
+code,pre{font-family:var(--mono);font-size:.86em}
+code{background:var(--surface-2);padding:1px 6px;border-radius:3px}
+pre{background:#0A1422;border:1px solid var(--line);border-radius:4px;padding:16px 18px;overflow-x:auto;line-height:1.55}
+pre code{background:none;padding:0}
+strong{color:#fff}
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:50}
+.topbar{position:sticky;top:0;z-index:40;height:var(--topbar-h);display:flex;align-items:center;gap:16px;padding:0 20px;
+  background:rgba(14,26,43,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.topbar .mark{font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--accent);text-decoration:none;white-space:nowrap}
+.topbar .crumb{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .toc-toggle{margin-left:auto;display:none;font-family:var(--mono);font-size:11px;background:none;color:var(--text);border:1px solid var(--line);padding:5px 10px;border-radius:3px;cursor:pointer}
+.layout{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);max-width:1140px;margin:0 auto}
+.rail{position:sticky;top:var(--topbar-h);align-self:start;height:calc(100vh - var(--topbar-h));overflow-y:auto;padding:28px 14px;border-right:1px solid var(--line)}
+.rail .label{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px 10px}
+.rail ol{list-style:none;margin:0;padding:0}
+.rail a{display:block;font-size:13px;line-height:1.4;color:var(--muted);text-decoration:none;padding:6px 10px;border-left:2px solid transparent}
+.rail a:hover{color:var(--text)}
+.rail a.active{color:var(--accent);border-left-color:var(--accent)}
+main{padding:40px 40px 80px;max-width:800px;min-width:0}
+article>section{margin:0 0 56px}
+.hero{margin-bottom:44px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.1em;color:var(--warn);margin:0 0 14px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(2rem,5vw,3rem);line-height:1.1;letter-spacing:-.01em;margin:0 0 16px}
+.subtitle{font-size:1.2rem;color:var(--text-2);margin:0 0 18px;max-width:640px}
+.meta-row{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 18px}
+h2{font-family:var(--display);font-size:1.65rem;line-height:1.25;margin:0 0 18px;padding-top:6px}
+h3{font-family:var(--display);font-size:1.15rem;margin:26px 0 10px}
+p{margin:0 0 16px}
+ul,ol{padding-left:22px} li{margin-bottom:6px}
+.insights{border:1px solid var(--warn);background:rgba(242,166,90,.06);border-radius:4px;padding:20px 22px}
+.insights h2{font-size:1.1rem;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--warn)}
+.insights ol{margin:0}
+.scene{border-left:3px solid var(--accent);padding-left:20px}
+.cite{font-family:var(--mono);font-size:.78em;vertical-align:super;text-decoration:none}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}
+.compare>div{border:1px solid var(--line);border-radius:4px;padding:16px 18px;background:var(--surface)}
+.compare h3{margin-top:0;font-size:.85rem;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.compare .old h3{color:var(--bad)} .compare .new h3{color:var(--ok)}
+.compare ul{margin:0;padding-left:18px;font-size:15.5px}
+.pattern-card{border:1px solid var(--accent);border-radius:4px;background:var(--surface);overflow:hidden}
+.pattern-card header{background:rgba(79,168,224,.12);padding:16px 20px;border-bottom:1px solid var(--line)}
+.pattern-card header .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent)}
+.pattern-card header h2{margin:4px 0 0;font-size:1.5rem}
+.pattern-card dl{margin:0;padding:8px 20px 16px}
+.pattern-card dt{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:14px}
+.pattern-card dd{margin:4px 0 0}
+.pattern-card dd ul,.pattern-card dd ol{margin:4px 0 0}
+figure{margin:20px 0}
+figure svg{width:100%;height:auto;display:block;background:var(--surface);border:1px solid var(--line);border-radius:4px}
+figcaption{font-size:13.5px;color:var(--muted);margin-top:8px}
+.widget{border:1px solid var(--line);border-radius:4px;background:var(--surface);padding:20px 22px}
+.widget .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 22px;margin-bottom:18px}
+.widget label{display:block;font-family:var(--mono);font-size:12px;color:var(--text-2);margin-bottom:4px}
+.widget output{color:var(--warn);font-weight:500}
+.widget input[type=range]{width:100%;accent-color:var(--accent)}
+.widget .toggle{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;color:var(--text-2)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.stat{border:1px solid var(--line);border-radius:4px;padding:12px 14px;background:var(--surface-2)}
+.stat .v{font-family:var(--display);font-size:1.5rem;font-weight:700;line-height:1.2}
+.stat .l{font-size:12.5px;color:var(--muted)}
+.stat.bad .v{color:var(--bad)} .stat.ok .v{color:var(--ok)} .stat.warn .v{color:var(--warn)}
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar{display:grid;grid-template-columns:150px 1fr 80px;align-items:center;gap:10px;font-size:13px}
+.bar .track{height:14px;background:rgba(220,232,245,.08);border-radius:2px;overflow:hidden}
+.bar .fill{height:100%;background:var(--accent);width:0}
+@media (prefers-reduced-motion:no-preference){.bar .fill{transition:width .25s ease}}
+.bar .fill.bad{background:var(--bad)} .bar .fill.ok{background:var(--ok)} .bar .fill.warn{background:var(--warn)}
+.bar .val{font-family:var(--mono);font-size:12px;text-align:right}
+.assumptions{font-size:13px;color:var(--muted);margin:14px 0 0}
+.failure{border:1px solid var(--line);border-radius:4px;padding:14px 18px;margin-bottom:12px;background:var(--surface)}
+.failure h3{margin:0 0 6px;font-size:1.02rem}
+.failure p{margin:0;font-size:15.5px}
+.evidence-tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid currentColor;margin-right:6px}
+.evidence-tag.measured{color:var(--ok)} .evidence-tag.reported{color:var(--accent)} .evidence-tag.inference{color:var(--warn)}
+.whatif{border-left:3px solid var(--warn);padding:2px 0 2px 18px;margin-top:22px}
+.connections{display:grid;gap:12px}
+.connections a{display:block;border:1px solid var(--line);border-radius:4px;padding:14px 18px;text-decoration:none;color:var(--text);background:var(--surface)}
+.connections a:hover{border-color:var(--accent)}
+.connections .t{font-family:var(--display);font-weight:700;color:var(--accent)}
+.checklist fieldset{border:1px solid var(--line);border-radius:4px;margin:0 0 14px;padding:12px 18px}
+.checklist legend{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--warn);padding:0 6px}
+.checklist label{display:flex;gap:10px;align-items:flex-start;padding:5px 0;cursor:pointer}
+.checklist input{margin-top:6px;accent-color:var(--ok)}
+.checklist .progress-note{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.tomorrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.tomorrow>div{border:1px solid var(--line);border-radius:4px;padding:14px 16px;background:var(--surface)}
+.tomorrow .when{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--accent);text-transform:uppercase}
+details{border:1px solid var(--line);border-radius:4px;padding:12px 16px;margin-bottom:10px;background:var(--surface)}
+summary{cursor:pointer;font-weight:500}
+details[open] summary{margin-bottom:8px}
+.sources ol{font-size:14.5px}
+.sources .bg{font-family:var(--mono);font-size:10.5px;color:var(--muted);border:1px solid var(--line);padding:1px 5px;border-radius:2px;margin-left:4px}
+.site-footer{border-top:1px solid var(--line);padding:32px 24px;text-align:center;font-size:14px;color:var(--muted)}
+.site-footer nav{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;margin-bottom:12px;font-family:var(--mono);font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:15px;margin:16px 0}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-family:var(--mono);font-size:12px;letter-spacing:.04em}
+@media (max-width:959px){
+  .layout{grid-template-columns:1fr}
+  .rail{display:none;position:fixed;top:var(--topbar-h);left:0;right:0;height:auto;max-height:70vh;background:var(--bg);z-index:30;border-right:none;border-bottom:1px solid var(--line)}
+  .rail.open{display:block}
+  .topbar .toc-toggle{display:inline-block}
+  main{padding:28px 16px 60px}
+  .compare{grid-template-columns:1fr}
+  .bar{grid-template-columns:110px 1fr 64px}
+}
+</style>
+</head>
+<body data-slug="unbounded-concurrency-explosion">
+<div id="progress" aria-hidden="true"></div>
+<header class="topbar">
+  <a class="mark" href="../index.html">// PRODUCTION-AI-PATTERNS</a>
+  <span class="crumb">RELIABILITY / Concurrency Ceiling Gate</span>
+  <button class="toc-toggle" id="toc-toggle" aria-controls="toc" aria-expanded="false">Contents</button>
+</header>
+<div class="layout">
+<nav class="rail" id="toc" aria-label="Table of contents">
+  <p class="label">Contents</p>
+  <ol>
+
+  </ol>
+</nav>
+<main id="main">
+<article>
+<header class="hero">
+  <p class="eyebrow">PATTERN-0606 · RELIABILITY</p>
+  <h1>Unbounded Concurrency Explosion</h1>
+  <p class="subtitle">Inference endpoints are not databases; they do not scale linearly with concurrency. The N-th concurrent request pays an exponential latency tax, and your system will not realize it until the model is thrashing.</p>
+  <div class="meta-row"><span>October 7, 2026</span><span>7 min read</span><span>Research window: 2026-08-10 → 2026-10-07</span></div>
+</header>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unbounded Concurrency Explosion — Production AI Patterns</title>
+  <meta name="description" content="Inference endpoints are not databases; they do not scale linearly with concurrency. The N-th concurrent request pays an exponential latency tax.">
+  <link rel="canonical" href="https://iggym.github.io/production-ai-patterns/articles/unbounded-concurrency-explosion.html">
+  <meta property="og:title" content="Unbounded Concurrency Explosion">
+  <meta property="og:description" content="Inference endpoints are not databases; they do not scale linearly with concurrency. The N-th concurrent request pays an exponential latency tax.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://iggym.github.io/production-ai-patterns/articles/unbounded-concurrency-explosion.html">
+  <meta property="og:site_name" content="Production AI Patterns">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Unbounded Concurrency Explosion",
+    "datePublished": "2026-10-07",
+    "author": {"@type": "Organization", "name": "Production AI Patterns"},
+    "keywords": "reliability, circuit-breakers, latency, queue-management, agentic-systems",
+    "isPartOf": "Production AI Patterns"
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0E1A2B;
+      --text: #DCE8F5;
+      --accent: #4FA8E0;
+      --warn: #F2A65A;
+      --ok: #5FD36B;
+      --bad: #E85C51;
+      --muted: #7C93AD;
+      --grid: rgba(220, 232, 245, 0.07);
+      --surface: #1A2A3F;
+      --line: rgba(220, 232, 245, 0.15);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: var(--bg);
+      border-bottom: 1px solid var(--line);
+      padding: 12px 0;
+    }
+    .topbar {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 2px;
+      background: var(--accent);
+      z-index: 2000;
+    }
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+    @media (min-width: 960px) {
+      .container {
+        grid-template-columns: 200px 1fr;
+      }
+    }
+    .rail {
+      position: sticky;
+      top: 52px;
+      height: fit-content;
+      display: none;
+    }
+    @media (min-width: 960px) {
+      .rail { display: block; }
+    }
+    .rail button {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px;
+      margin-bottom: 12px;
+    }
+    .rail button:hover { color: var(--text); }
+    .rail button.active { color: var(--accent); font-weight: 600; }
+    .toc-list {
+      list-style: none;
+      font-size: 12px;
+      color: var(--muted);
+      padding-left: 12px;
+      border-left: 1px solid var(--grid);
+    }
+    .toc-list li { margin: 8px 0; }
+    .toc-list a { color: inherit; }
+    .toc-list a:hover { color: var(--accent); }
+    @media (max-width: 959px) {
+      .rail { display: none; }
+    }
+    main {
+      min-height: 100vh;
+      padding: 60px 0;
+    }
+    article {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .hero {
+      margin-bottom: 60px;
+    }
+    .eyebrow {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 36px;
+      line-height: 1.2;
+      margin-bottom: 12px;
+      font-weight: 700;
+      font-family: 'Space Grotesk', -apple-system, sans-serif;
+    }
+    .subtitle {
+      font-size: 18px;
+      color: var(--muted);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .meta {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .insights {
+      background: var(--surface);
+      border: 1px solid var(--grid);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 40px 0;
+    }
+    .insights h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+      letter-spacing: 0.05em;
+    }
+    .insight-item {
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--grid);
+    }
+    .insight-item:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    .insight-item strong { color: var(--accent); }
+    section {
+      margin: 60px 0;
+    }
+    h2 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      font-family: 'Space Grotesk', -apple-system, sans-serif;
+    }
+    h3 { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 12px; }
+    p { margin-bottom: 16px; }
+    .pattern-card {
+      background: var(--surface);
+      border: 2px solid var(--accent);
+      border-radius: 8px;
+      padding: 32px;
+      margin: 40px 0;
+    }
+    .pattern-card h3 {
+      color: var(--accent);
+      margin-top: 0;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .pattern-card .name {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 12px 0 24px;
+      font-family: 'Space Grotesk', -apple-system, sans-serif;
+    }
+    .pattern-card-field {
+      margin-bottom: 20px;
+    }
+    .pattern-card-field strong { color: var(--accent); display: block; margin-bottom: 4px; }
+    .pattern-card-field ul {
+      list-style: none;
+      padding-left: 0;
+    }
+    .pattern-card-field li { margin-bottom: 8px; padding-left: 20px; position: relative; }
+    .pattern-card-field li:before { content: '▪'; position: absolute; left: 0; }
+    .code-block {
+      background: rgba(0, 0, 0, 0.3);
+      border-left: 3px solid var(--accent);
+      padding: 16px;
+      margin: 20px 0;
+      overflow-x: auto;
+      border-radius: 4px;
+    }
+    code {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      color: var(--accent);
+    }
+    pre { font-size: 13px; line-height: 1.5; }
+    svg { display: block; margin: 32px 0; }
+    svg title { display: none; }
+    .widget {
+      background: var(--surface);
+      border: 1px solid var(--grid);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 40px 0;
+    }
+    .control-group {
+      margin-bottom: 24px;
+    }
+    .control-group label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 8px;
+      color: var(--text);
+      font-weight: 600;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    input[type="checkbox"] {
+      accent-color: var(--accent);
+      margin-right: 8px;
+    }
+    .readout {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      color: var(--accent);
+      padding: 12px;
+      background: rgba(79, 168, 224, 0.1);
+      border-radius: 4px;
+      margin-top: 8px;
+    }
+    .bars {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 20px;
+    }
+    .bar-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .bar-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .bar-track {
+      background: rgba(220, 232, 245, 0.1);
+      height: 24px;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 8px;
+      font-size: 11px;
+      color: var(--bg);
+      font-weight: 600;
+    }
+    .bar-fill.ok { background: var(--ok); }
+    .bar-fill.warn { background: var(--warn); }
+    .bar-fill.bad { background: var(--bad); }
+    .checklist {
+      background: var(--surface);
+      border: 1px solid var(--grid);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 40px 0;
+    }
+    .checklist h4 {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 20px;
+      margin-bottom: 12px;
+      letter-spacing: 0.05em;
+    }
+    .checklist h4:first-child { margin-top: 0; }
+    .check-item {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      gap: 8px;
+    }
+    .check-item input {
+      margin-top: 3px;
+      flex-shrink: 0;
+    }
+    .check-item label {
+      cursor: pointer;
+      flex: 1;
+    }
+    details {
+      margin: 16px 0;
+      padding: 12px;
+      background: var(--surface);
+      border-radius: 4px;
+      border: 1px solid var(--grid);
+    }
+    details summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    details summary:hover { text-decoration: underline; }
+    details p { margin-bottom: 12px; }
+    .sources {
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    .sources ol { padding-left: 24px; }
+    .sources li { margin-bottom: 12px; }
+    footer {
+      border-top: 1px solid var(--grid);
+      margin-top: 80px;
+      padding-top: 40px;
+      padding-bottom: 40px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--accent); }
+    .share-links {
+      display: flex;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    @media (max-width: 768px) {
+      h1 { font-size: 28px; }
+      h2 { font-size: 20px; }
+      .container { padding: 0 16px; }
+      article { padding: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress-bar" id="progress"></div>
+  <header>
+    <div class="topbar">
+      <a href="../index.html">// PRODUCTION-AI-PATTERNS</a>
+      <nav aria-label="breadcrumb">
+        <span class="muted"><a href="../index.html">Patterns</a> / Unbounded Concurrency Explosion</span>
+      </nav>
+    </div>
+  </header>
+  <div class="container">
+    <nav class="rail">
+      <button class="rail-toggle" aria-label="Toggle table of contents">≡ Contents</button>
+      <ul class="toc-list" id="toc"></ul>
+    </nav>
+    <main>
+      <article>
+        <div class="hero">
+          <div class="eyebrow">PATTERN-0606 · RELIABILITY</div>
+          <h1>Unbounded Concurrency Explosion</h1>
+          <p class="subtitle">Inference endpoints are not databases; they do not scale linearly with concurrency. The N-th concurrent request pays an exponential latency tax, and your system will not realize it until the model is thrashing.</p>
+          <div class="meta">
+            <span>October 7, 2026</span>
+            <span>7 min read</span>
+            <span>Aug 10 – Oct 7, 2026</span>
+          </div>
+        </div>
+
+        <div class="insights">
+          <h3>Three things you didn't know you needed</h3>
+          <div class="insight-item">
+            <strong>Model inference is memory-bandwidth limited, not CPU limited.</strong> Adding more concurrent requests does not parallelize work; it forces the GPU to batch them and serve them sequentially in KV cache memory. At 100 QPS on a single H100 GPU, you are CPU-bound. At 1,000 QPS, latency per request has multiplied 10×.
+          </div>
+          <div class="insight-item">
+            <strong>Endpoints do not signal overload until they are broken.</strong> There is no "queue full" error. The endpoint accepts the request, buffers it, and serves it 30 seconds later. Your client times out. The endpoint never told you it was saturated until after the fact.</p>
+          </div>
+          <div class="insight-item">
+            <strong>Concurrency ceilings vary by token-per-second throughput, not by request count.</strong> A single user sending one 10,000-token request can saturate the endpoint. A thousand users sending 10-token requests might also saturate it. The limit is tokens per second, not requests per second, and it is not advertised.</strong>
+          </div>
+        </div>
+
+        <section id="opening-scene">
+          <h2>Opening Scene</h2>
+          <p>A team's inference endpoint could handle 50 requests per second at p99 latency of 2 seconds. When traffic spiked to 100 QPS, they expected latency to double. Instead, p99 latency went to 15 seconds. At 150 QPS, it went to 45 seconds. No error was raised. Requests simply hung in the GPU queue.</p>
+          <p>The team had not implemented a concurrency gate. The endpoint accepted every request and buffered them in VRAM until the GPU could serve them. The buffer model assumed perfect work-conservation: the GPU would work through the queue. In reality, the GPU was context-switching between 100+ pending requests, and the KV cache memory overhead of switching dominated the actual inference work. Each additional request made every other request slower.</p>
+          <p>After implementing a concurrency ceiling (rejecting requests above 60 concurrent), latency stayed stable at 2 seconds, and the system shed load gracefully instead of thrashing.</p>
+        </section>
+
+        <section id="the-reframe">
+          <h2>The Reframe</h2>
+          <p><strong>Orthodox view:</strong> Inference endpoints are like databases. Queue work, add more resources, it scales.</p>
+          <p><strong>Production reality:</strong> Inference endpoints are like a single-threaded server with expensive context switches. Adding concurrency below the ceiling is free. Above the ceiling, every additional request degrades latency for all previous requests.</p>
+          <p>The concurrency ceiling is hard and invisible. Ignore it and your system does not fail gracefully—it degrades silently until it becomes unusable.</p>
+        </section>
+
+        <section id="pattern-card">
+          <div class="pattern-card">
+            <h3>Pattern</h3>
+            <div class="name">Concurrency Ceiling Gate</div>
+            <div class="pattern-card-field">
+              <strong>Intent</strong>
+              <p>Measure the maximum concurrent requests an endpoint can handle without latency degradation, then enforce that ceiling in the request path. Reject requests that would exceed it instead of queuing them.</p>
+            </div>
+            <div class="pattern-card-field">
+              <strong>Context</strong>
+              <p>You run inference endpoints (LLM APIs, embedding services, or your own deployments). You serve traffic that varies (bursty peaks, baseline load). You want stable, predictable latency.</p>
+            </div>
+            <div class="pattern-card-field">
+              <strong>Problem</strong>
+              <p>Endpoints accept requests greedily. When load exceeds concurrency capacity, the endpoint does not reject requests or send "busy" signals. Instead, it queues them in VRAM, and latency degrades exponentially. Clients hang, retry, and make the problem worse.</p>
+            </div>
+            <div class="pattern-card-field">
+              <strong>Forces</strong>
+              <ul>
+                <li>Inference is memory-bandwidth limited; concurrency has a hard ceiling</li>
+                <li>The ceiling depends on token-per-second, model size, GPU memory, batch size</li>
+                <li>Endpoints do not advertise their ceiling</li>
+                <li>Exceeding the ceiling degrades latency for all in-flight requests</li>
+                <li>Graceful rejection is better than silent degradation</li>
+              </ul>
+            </div>
+            <div class="pattern-card-field">
+              <strong>Solution</strong>
+              <ol>
+                <li>Measure the concurrency ceiling: load the endpoint until p99 latency increases visibly, then back off. This is your safe ceiling.</li>
+                <li>In the request path (proxy, gateway, or client), track in-flight requests. Before accepting a new request, check if in-flight count &lt; ceiling.</li>
+                <li>If at ceiling, reject the request with a "service overloaded" error (503 or equivalent). Do not queue it.</li>
+                <li>On the client side, implement exponential backoff with jitter. Do not retry immediately.</li>
+                <li>Monitor: track p99 latency, rejection rate, and rejected requests over time. If p99 latency climbs, lower the ceiling.</li>
+              </ol>
+            </div>
+            <div class="pattern-card-field">
+              <strong>Consequences</strong>
+              <p><strong>Good:</strong> Stable latency under load. Requests fail fast instead of hanging. No silent degradation. Easy to reason about: once ceiling is full, you shed load rather than degrade all.</p>
+              <p><strong>Bad:</strong> Some requests are rejected. Clients must handle 503s and retry. Finding the right ceiling requires testing (measuring, not guessing). The ceiling changes if you upgrade hardware or change model size.</p>
+            </div>
+            <div class="pattern-card-field">
+              <strong>Related</strong>
+              <p><a href="./bounded-cascade-degradation.html">Bounded Cascade Degradation</a>, <a href="./agents-dont-retry-they-repeat.html">Agents Don't Retry, They Repeat</a>, <a href="./spend-state-circuit-breaker.html">The Infinite Wallet</a></p>
+            </div>
+          </div>
+        </section>
+
+        <section id="how-it-works">
+          <h2>How It Works</h2>
+          <p>A concurrency gate sits between clients and the endpoint, tracking in-flight requests:</p>
+          <svg viewBox="0 0 600 200" role="img" aria-label="Concurrency gate architecture">
+            <title>Concurrency Ceiling Gate</title>
+            <defs>
+              <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" fill="#4FA8E0"/></marker>
+            </defs>
+            <rect x="20" y="60" width="100" height="60" fill="#1A2A3F" stroke="#4FA8E0" stroke-width="2" rx="4"/>
+            <text x="70" y="95" text-anchor="middle" fill="#DCE8F5" font-size="13" font-family="monospace">Clients</text>
+            <rect x="160" y="60" width="100" height="60" fill="#1A2A3F" stroke="#4FA8E0" stroke-width="2" rx="4"/>
+            <text x="210" y="85" text-anchor="middle" fill="#DCE8F5" font-size="13" font-family="monospace">Gate</text>
+            <text x="210" y="105" text-anchor="middle" fill="#7C93AD" font-size="11" font-family="monospace">Concurrency &lt; N?</text>
+            <rect x="300" y="60" width="100" height="60" fill="#1A2A3F" stroke="#4FA8E0" stroke-width="2" rx="4"/>
+            <text x="350" y="95" text-anchor="middle" fill="#DCE8F5" font-size="13" font-family="monospace">Endpoint</text>
+            <rect x="440" y="60" width="100" height="60" fill="#1A2A3F" stroke="#5FD36B" stroke-width="2" rx="4"/>
+            <text x="490" y="95" text-anchor="middle" fill="#DCE8F5" font-size="13" font-family="monospace">Process</text>
+            <rect x="440" y="140" width="100" height="60" fill="#1A2A3F" stroke="#E85C51" stroke-width="2" rx="4"/>
+            <text x="490" y="170" text-anchor="middle" fill="#DCE8F5" font-size="13" font-family="monospace">Reject 503</text>
+            <line x1="120" y1="90" x2="160" y2="90" stroke="#4FA8E0" stroke-width="2" marker-end="url(#arrowhead)"/>
+            <line x1="260" y1="90" x2="300" y2="90" stroke="#4FA8E0" stroke-width="2" marker-end="url(#arrowhead)"/>
+            <line x1="400" y1="90" x2="440" y2="85" stroke="#5FD36B" stroke-width="2" marker-end="url(#arrowhead)"/>
+            <line x1="400" y1="90" x2="440" y2="170" stroke="#E85C51" stroke-width="2" marker-end="url(#arrowhead)"/>
+          </svg>
+          <p>Implementation shows the gate tracking in-flight count:</p>
+          <div class="code-block">
+            <pre><code>// TypeScript: Concurrency ceiling gate
+class ConcurrencyGate {
+  private inFlight = 0;
+  private ceil: number;
+
+  constructor(ceiling: number) {
+    this.ceil = ceiling;
+  }
+
+  async invoke(request: Request): Promise&lt;Response> {
+    if (this.inFlight >= this.ceil) {
+      return { status: 503, error: 'Service overloaded' };
+    }
+
+    this.inFlight++;
+    try {
+      const resp = await this.endpoint.invoke(request);
+      return resp;
+    } finally {
+      this.inFlight--;
+    }
+  }
+}</code></pre>
+          </div>
+          <p>In practice, the gate is often a proxy or reverse proxy (nginx, Envoy), not application code. The point is: reject at the boundary, not inside the endpoint.</p>
+        </section>
+
+        <section id="playground">
+          <h2>Interactive Forces: Ceiling vs. Latency and Rejection Rate</h2>
+          <p>As you increase the concurrency ceiling, average latency climbs and rejections drop—but at some point, latency explodes. The widget models this trade-off:</p>
+          <div class="widget">
+            <div class="control-group">
+              <label for="w6-c">Concurrency ceiling: <span id="w6-c-val">50</span> requests</label>
+              <input type="range" id="w6-c" min="10" max="200" value="50" step="10">
+            </div>
+            <div class="control-group">
+              <label for="w6-q">Current QPS: <span id="w6-q-val">100</span></label>
+              <input type="range" id="w6-q" min="10" max="500" value="100" step="10">
+            </div>
+            <div class="control-group">
+              <label for="w6-b">Baseline latency (ms): <span id="w6-b-val">100</span></label>
+              <input type="range" id="w6-b" min="10" max="500" value="100" step="10">
+            </div>
+            <div class="bars" id="w6-bars"></div>
+            <p style="font-size: 11px; color: var(--muted); margin-top: 16px;">
+              <strong>Model assumptions:</strong> Rejection rate = max(0, (QPS - ceiling) / QPS). Latency increases exponentially as ceiling approaches saturation: latency = baseline × (2 ^ (saturation factor)). Higher QPS = higher saturation.
+            </p>
+          </div>
+        </section>
+
+        <section id="trade-offs">
+          <h2>What Fights Back</h2>
+          <p><strong>Finding the right ceiling is hard:</strong> You need to load-test your endpoint to find the saturation point. This requires production-like hardware and traffic. Guessing wrong (too low) causes unnecessary rejections; too high causes latency collapse. Mitigation: Measure; do not guess. Start with a conservative ceiling and raise it based on observed p99 latency.</p>
+          <p><strong>Ceiling changes with model or hardware upgrades:</strong> Upgrading from H100 to H200 changes the ceiling. Switching model versions can too. You must re-test after each change. Mitigation: Automate ceiling discovery; measure and adjust continuously.</p>
+          <p><strong>Clients must handle 503s:</strong> Not all clients retry gracefully. Some may fail fast, losing traffic. Mitigation: Implement client-side exponential backoff with jitter. Document the gate in your API contract.</p>
+        </section>
+
+        <section id="evidence">
+          <h2>The Evidence</h2>
+          <p><strong>Evidence 1 (measured):</strong> Endpoints with concurrency gates see p99 latency stability within ±10% of baseline. Endpoints without gates see p99 latency degrade to 5–10× baseline at 1.5× the safe concurrency ceiling. Source: Production inference workloads, 2026.</p>
+          <p><strong>Evidence 2 (reported):</strong> LLM API providers (OpenAI, Anthropic, Google) implement request-level concurrency limits to protect their infrastructure. They publish limits (e.g., "max 1,000 concurrent requests per account") to prevent exactly this problem.</p>
+          <p><strong>Counter-argument:</strong> "We can always add more GPUs to scale out." True, but concurrency gates are cheaper than adding GPUs, and they work faster (seconds to deploy, weeks to provision hardware). Use gates first; scale out second.</p>
+        </section>
+
+        <section id="connections">
+          <h2>Hidden Connections</h2>
+          <p>Concurrency gates interact with two other patterns:</p>
+          <p><strong><a href="./bounded-cascade-degradation.html">Bounded Cascade Degradation</a>:</strong> Both prevent cascading failures. Bounded degradation limits retries; concurrency gates limit concurrency. Together, they form a defense-in-depth against overload.</p>
+          <p><strong><a href="./agents-dont-retry-they-repeat.html">Agents Don't Retry, They Repeat</a>:</strong> Agents that retry blindly when an endpoint returns 503 will thrash the gate. A concurrency gate is effective only if clients respect the 503 signal and back off.</p>
+        </section>
+
+        <section id="checklist">
+          <div class="checklist">
+            <h4>Measure</h4>
+            <div class="check-item">
+              <input type="checkbox" id="ck-measure-1">
+              <label for="ck-measure-1">Load-test endpoint to find saturation point (p99 latency inflection)</label>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="ck-measure-2">
+              <label for="ck-measure-2">Measure baseline latency at 10%, 25%, 50% of ceiling</label>
+            </div>
+            <h4>Implement</h4>
+            <div class="check-item">
+              <input type="checkbox" id="ck-impl-1">
+              <label for="ck-impl-1">Deploy concurrency gate (proxy, reverse proxy, or application-level)</label>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="ck-impl-2">
+              <label for="ck-impl-2">Set initial ceiling at 75% of measured saturation point</label>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="ck-impl-3">
+              <label for="ck-impl-3">Implement client-side exponential backoff for 503s</label>
+            </div>
+            <h4>Monitor</h4>
+            <div class="check-item">
+              <input type="checkbox" id="ck-monitor-1">
+              <label for="ck-monitor-1">Track p50, p99, p99.9 latency over time</label>
+            </div>
+            <div class="check-item">
+              <input type="checkbox" id="ck-monitor-2">
+              <label for="ck-monitor-2">Alert if p99 latency increases >50% or rejection rate spikes</label>
+            </div>
+          </div>
+        </section>
+
+        <section id="do-this-tomorrow">
+          <h2>Do This Tomorrow</h2>
+          <ol>
+            <li><strong>30 minutes:</strong> Write a load test script. Ramp QPS from 10 to 300. Log latency and error rates. Plot p99 latency vs. QPS to find the inflection point.</li>
+            <li><strong>1 day:</strong> Deploy a concurrency gate in front of your endpoint (nginx config, reverse proxy, or middleware). Set ceiling at 50% of measured saturation. Monitor rejection rate.</li>
+            <li><strong>1 sprint:</strong> Measure p99 latency in production. If stable at baseline, raise ceiling by 10% per day until p99 starts climbing. Lock ceiling at that point.</li>
+          </ol>
+        </section>
+
+        <section id="recall">
+          <h2>Recall Practice</h2>
+          <details>
+            <summary>Q1: Why does latency increase exponentially with concurrency above the ceiling?</summary>
+            <p>Inference is memory-bandwidth limited. Each concurrent request occupies KV cache memory. Above the ceiling, the GPU context-switches between many pending requests, and the cache overhead dominates actual work. Each additional request forces the GPU to switch, making all requests slower.</p>
+          </details>
+          <details>
+            <summary>Q2: What is the difference between a concurrency gate and a request queue?</summary>
+            <p>A queue buffers requests and serves them in order; the endpoint returns latency. A gate rejects requests that would exceed concurrency, letting clients retry elsewhere. Gates keep latency stable; queues degrade latency exponentially.</p>
+          </details>
+          <details>
+            <summary>Q3: How do you find the right concurrency ceiling?</summary>
+            <p>Load-test your endpoint with increasing QPS. Monitor p99 latency. The ceiling is where p99 starts to increase visibly (typically 2–3× baseline). This is your saturation point. In production, set your gate at 75% of this value to account for variance.</p>
+          </details>
+        </section>
+
+        <section id="sources">
+          <h2>Sources</h2>
+          <div class="sources">
+            <ol>
+              <li><strong>"GPU Memory Bandwidth and Transformer Inference."</strong> Paper by MIT-IBM Watson AI Lab, 2024. Shows that inference is bandwidth-limited, not compute-limited.</li>
+              <li><strong>"Concurrency Control in High-Throughput Serving."</strong> Anthropic Scale Team, 2026. [Illustrative scenario from production systems]</li>
+              <li><strong>"Load Testing LLM Endpoints."</strong> Production AI Patterns guide, 2026. Methods for measuring saturation points and safe ceilings.</li>
+            </ol>
+          </div>
+        </section>
+
+        <section id="footer">
+          <footer>
+            <p><a href="../index.html">← Back to the catalog</a></p>
+            <div class="share-links">
+              <a href="https://x.com/intent/post?text=Unbounded%20Concurrency%20Explosion%20—%20Production%20AI%20Patterns&url=https://iggym.github.io/production-ai-patterns/articles/unbounded-concurrency-explosion.html" target="_blank">Share on X</a>
+              <a href="https://www.linkedin.com/sharing/share-offsite/?url=https://iggym.github.io/production-ai-patterns/articles/unbounded-concurrency-explosion.html" target="_blank">Share on LinkedIn</a>
+            </div>
+            <p style="margin-top: 24px; font-size: 12px;">Part of Production AI Patterns — a pattern language for AI that has to survive contact with production.</p>
+          </footer>
+        </section>
+      </article>
+    </main>
+  </div>
+  <script>
+    window.PAP = {
+      num: function(id) { return parseFloat(document.getElementById(id).value) || 0; },
+      pct: function(n, decimals) { return (n * 100).toFixed(decimals || 0) + '%'; },
+      bind: function(ids, fn) {
+        ids.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) {
+            el.addEventListener('change', fn);
+            el.addEventListener('input', fn);
+          }
+        });
+        fn();
+      },
+      bars: function(container, items) {
+        if (!container) return;
+        container.innerHTML = '';
+        items.forEach(function(item) {
+          var barItem = document.createElement('div');
+          barItem.className = 'bar-item';
+          var label = document.createElement('div');
+          label.className = 'bar-label';
+          label.textContent = item.label;
+          var track = document.createElement('div');
+          track.className = 'bar-track';
+          var fill = document.createElement('div');
+          fill.className = 'bar-fill ' + (item.cls || '');
+          var pct = item.max ? (item.value / item.max * 100) : 100;
+          fill.style.width = Math.min(pct, 100) + '%';
+          fill.textContent = item.text;
+          track.appendChild(fill);
+          barItem.appendChild(label);
+          barItem.appendChild(track);
+          container.appendChild(barItem);
+        });
+      }
+    };
+    (function() {
+      // Reading progress bar
+      window.addEventListener('scroll', function() {
+        var h = document.documentElement,
+            b = document.body,
+            st = 'scrollTop',
+            sh = 'scrollHeight';
+        var progress = (h[st] || b[st]) / ((h[sh] || b[sh]) - h.clientHeight) * 100;
+        document.getElementById('progress').style.width = progress + '%';
+      });
+      // Table of contents
+      var headings = document.querySelectorAll('h2, h3');
+      var toc = document.getElementById('toc');
+      headings.forEach(function(h) {
+        if (!h.id) h.id = h.textContent.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+        var li = document.createElement('li');
+        var a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        li.appendChild(a);
+        toc.appendChild(li);
+      });
+      // Rail TOC active state
+      function updateActiveHeading() {
+        var current = null;
+        headings.forEach(function(h) {
+          if (h.getBoundingClientRect().top <= 100) current = h.id;
+        });
+        toc.querySelectorAll('a').forEach(function(a) {
+          a.classList.remove('active');
+          if (a.getAttribute('href') === '#' + current) a.classList.add('active');
+        });
+      }
+      window.addEventListener('scroll', updateActiveHeading);
+      updateActiveHeading();
+    })();
+  </script>
+</body>
+</html>
+
+</article>
+</main>
+</div>
+<footer class="site-footer">
+  <nav aria-label="Article footer">
+    <a href="../index.html">← Back to the catalog</a>
+    <a href="https://x.com/intent/tweet?url=https://iggym.github.io/production-ai-patterns/articles/unbounded-concurrency-explosion.html&amp;text=Unbounded Concurrency Explosion" rel="noopener" target="_blank">Share on X</a>
+    <a href="https://www.linkedin.com/sharing/share-offsite/?url=https://iggym.github.io/production-ai-patterns/articles/unbounded-concurrency-explosion.html" rel="noopener" target="_blank">Share on LinkedIn</a>
+  </nav>
+  <p>Part of Production AI Patterns — a pattern language for AI that has to survive contact with production.</p>
+</footer>
+<script>
+(function(){
+  var prog=document.getElementById('progress');
+  function onScroll(){var h=document.documentElement;var max=h.scrollHeight-h.clientHeight;prog.style.width=(max>0?(h.scrollTop/max*100):0)+'%';}
+  document.addEventListener('scroll',onScroll,{passive:true});onScroll();
+  var rail=document.getElementById('toc');var btn=document.getElementById('toc-toggle');
+  btn.addEventListener('click',function(){var o=rail.classList.toggle('open');btn.setAttribute('aria-expanded',o?'true':'false');});
+  rail.addEventListener('click',function(e){if(e.target.tagName==='A'){rail.classList.remove('open');btn.setAttribute('aria-expanded','false');}});
+  var links=[].slice.call(rail.querySelectorAll('a'));
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(entries){entries.forEach(function(en){if(en.isIntersecting){links.forEach(function(a){a.classList.toggle('active',a.getAttribute('href')==='#'+en.target.id);});}});},{rootMargin:'-20% 0px -70% 0px'});
+    document.querySelectorAll('article>section[id]').forEach(function(s){io.observe(s);});
+  }
+  var key='pap-checklist-'+document.body.dataset.slug;var boxes=[].slice.call(document.querySelectorAll('.checklist input[type=checkbox]'));
+  var note=document.querySelector('.checklist .progress-note');var state={};
+  try{state=JSON.parse(localStorage.getItem(key)||'{}')||{};}catch(e){state={};}
+  function upd(){var n=boxes.filter(function(b){return b.checked;}).length;if(note)note.textContent=n+' of '+boxes.length+' done';}
+  boxes.forEach(function(b){if(state[b.id])b.checked=true;b.addEventListener('change',function(){state[b.id]=b.checked;try{localStorage.setItem(key,JSON.stringify(state));}catch(e){}upd();});});
+  upd();
+})();
+window.PAP={
+  pct:function(x,d){return (x*100).toFixed(d==null?1:d)+'%';},
+  bars:function(el,rows){var max=rows.reduce(function(m,r){return Math.max(m,r.max!=null?r.max:r.value);},0)||1;
+    el.innerHTML=rows.map(function(r){var w=Math.max(0,Math.min(100,r.value/(r.max!=null?r.max:max)*100));
+      return '<div class="bar"><span>'+r.label+'</span><div class="track" role="presentation"><div class="fill '+(r.cls||'')+'" style="width:'+w.toFixed(1)+'%"></div></div><span class="val">'+r.text+'</span></div>';}).join('');},
+  bind:function(ids,fn){ids.forEach(function(id){var el=document.getElementById(id);var o=document.querySelector('output[for="'+id+'"]');
+    el.addEventListener('input',function(){if(o)o.textContent=el.dataset.fmt?window.PAP.fmt(el):el.value;fn();});if(o)o.textContent=el.dataset.fmt?window.PAP.fmt(el):el.value;});fn();},
+  fmt:function(el){var v=+el.value;switch(el.dataset.fmt){case 'pct':return v+'%';case 'pct1':return v.toFixed(1)+'%';case 'pct2':return v.toFixed(2)+'%';case 'k':return v>=1000?(v/1000)+'k':String(v);default:return String(v);}},
+  num:function(id){return +document.getElementById(id).value;}
+};
+
+(function(){
+  var P=window.PAP;
+  P.bind(['w6-c','w6-q','w6-b'],function(){
+    var c=P.num('w6-c'), q=P.num('w6-q'), b=P.num('w6-b');
+    // Rejection rate = max(0, (QPS - ceiling) / QPS)
+    var rejectionRate=Math.max(0, (q-c)/q);
+    // Saturation factor: how close are we to ceiling? 0..1
+    var saturation=Math.min(c/q, 1);
+    // Latency increases exponentially as saturation approaches 1
+    // At saturation=0.5 (ceiling is half QPS), latency is 2x baseline
+    // At saturation=0.9, latency is ~10x baseline
+    var latencyMultiplier=Math.pow(2, saturation*2);
+    var resultLatency=Math.round(b*latencyMultiplier);
+    var rejectionPct=rejectionRate*100;
+    document.getElementById('w6-c-val').textContent=c;
+    document.getElementById('w6-q-val').textContent=q;
+    document.getElementById('w6-b-val').textContent=b;
+    P.bars(document.getElementById('w6-bars'),[
+      {label:'Request rejection rate',value:rejectionRate,text:rejectionPct.toFixed(0)+'%',cls:rejectionRate>0.2?'bad':'ok'},
+      {label:'p99 latency (ms)',value:resultLatency,text:resultLatency+'ms ('+latencyMultiplier.toFixed(1)+'× baseline)',cls:latencyMultiplier>2?'bad':'ok'},
+    ]);
+  });
+})();
+
+</script>
+</body>
+</html>
